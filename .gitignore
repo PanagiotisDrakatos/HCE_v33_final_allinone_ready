@@ -1,0 +1,14 @@
+# Node
+node_modules/
+dist/
+coverage/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Misc
+.DS_Store
+.idea/
