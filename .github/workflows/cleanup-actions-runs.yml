@@ -1,0 +1,113 @@
+name: Cleanup Actions Runs
+
+on:
+  workflow_dispatch:
+    inputs:
+      count:
+        description: 'How many runs to delete (most recent first)'
+        required: false
+        default: '31'
+      workflow_id:
+        description: 'Workflow file name or ID to filter (optional)'
+        required: false
+        default: ''
+      branch:
+        description: 'Filter by branch (optional)'
+        required: false
+        default: ''
+      actor:
+        description: 'Filter by actor (optional)'
+        required: false
+        default: ''
+      event:
+        description: 'Filter by event (push, pull_request, etc.) (optional)'
+        required: false
+        default: ''
+      status:
+        description: 'Filter by status (completed, in_progress, queued) (optional)'
+        required: false
+        default: ''
+      older_than_days:
+        description: 'Only delete runs older than N days (optional)'
+        required: false
+        default: '0'
+      dry_run:
+        description: 'Preview only (true/false)'
+        required: false
+        default: 'false'
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete workflow runs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const maxToDelete = parseInt(core.getInput('count') || '31', 10);
+            const workflow_id = core.getInput('workflow_id') || undefined;
+            const branch = core.getInput('branch') || undefined;
+            const actor = core.getInput('actor') || undefined;
+            const event = core.getInput('event') || undefined;
+            const status = core.getInput('status') || undefined;
+            const olderDays = parseInt(core.getInput('older_than_days') || '0', 10);
+            const dryRun = (core.getInput('dry_run') || 'false').toLowerCase() === 'true';
+            const cutoff = olderDays > 0 ? new Date(Date.now() - olderDays*24*60*60*1000) : null;
+
+            let page = 1;
+            const per_page = 100;
+            let deleted = 0;
+
+            async function listPage(page) {
+              if (workflow_id) {
+                return await github.request('GET /repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs', {
+                  owner, repo, workflow_id, per_page, page, branch, actor, event, status,
+                });
+              } else {
+                return await github.request('GET /repos/{owner}/{repo}/actions/runs', {
+                  owner, repo, per_page, page, branch, actor, event, status,
+                });
+              }
+            }
+
+            core.info(`Starting cleanup: target delete ${maxToDelete}, workflow_id=${workflow_id||'ALL'}, branch=${branch||'ALL'}, status=${status||'ANY'}, older_than_days=${olderDays}, dry_run=${dryRun}`);
+
+            while (deleted < maxToDelete) {
+              const resp = await listPage(page);
+              const runs = resp.data.workflow_runs || [];
+              if (!runs.length) {
+                core.info('No more runs to process.');
+                break;
+              }
+
+              for (const run of runs) {
+                if (deleted >= maxToDelete) break;
+                if (run.id === context.runId) continue; // don't delete self
+                if (cutoff && new Date(run.created_at) > cutoff) continue; // newer than cutoff
+
+                core.info(`${dryRun ? 'Would delete' : 'Deleting'} run ${run.id} (${run.name}) #${run.run_number} created_at=${run.created_at} status=${run.status} conclusion=${run.conclusion}`);
+                if (!dryRun) {
+                  try {
+                    await github.request('DELETE /repos/{owner}/{repo}/actions/runs/{run_id}', {
+                      owner, repo, run_id: run.id,
+                    });
+                    deleted++;
+                  } catch (e) {
+                    core.warning(`Failed to delete run ${run.id}: ${e.message}`);
+                  }
+                } else {
+                  deleted++;
+                }
+              }
+
+              page++;
+            }
+
+            core.info(`Cleanup complete. ${deleted} runs ${dryRun ? 'selected' : 'deleted'}.`);
+
