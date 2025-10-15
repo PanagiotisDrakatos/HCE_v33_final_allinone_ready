@@ -1,6 +1,6 @@
 import logging
-from typing import Dict, List
-from dataclasses import dataclass
+from typing import Dict, List, Optional
+from dataclasses import dataclass, field
 import threading, time, queue
 
 @dataclass
@@ -8,15 +8,21 @@ class RepoConfig:
     backend: str = "none"   # none|clickhouse|timescale
     batch_size: int = 5000
     flush_interval_ms: int = 500
-    # tests pass queue_max, keep a compat alias property below
+    # accept both queue_max and queue_max_batches for compatibility
     queue_max: int = 200
+    queue_max_batches: Optional[int] = None
     clickhouse_url: str = "http://localhost:8123"
     timescale_dsn: str = "postgresql://postgres:postgres@localhost:5432/hce"
     table: str = "market_signals"
 
+    def __post_init__(self):
+        if self.queue_max_batches is not None:
+            # keep values in sync, prefer explicit queue_max_batches
+            self.queue_max = int(self.queue_max_batches)
+
     # Back-compat for older name used internally
     @property
-    def queue_max_batches(self) -> int:
+    def queue_max_batches_prop(self) -> int:
         return self.queue_max
 
 class Repo:

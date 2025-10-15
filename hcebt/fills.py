@@ -25,6 +25,13 @@ class OrderIntent:
 # Return type alias used by public fill methods
 FillTuple = Tuple[float, float, float, str]
 
+@dataclass
+class FillResult:
+    price: float
+    filled_qty: float
+    slip_cost: float
+    status: str
+
 class ShadowFillModel:
     def __init__(self, slip_mode: Any = "bps", ticks: float = 1.0, bps: float = 2.0, pct_spread: float = 0.5, hybrid_weight: float = 0.5, bid_ask_aware: bool=True, seed: int=42):
         # Allow passing a config object as the first positional arg
@@ -159,10 +166,16 @@ class ShadowFillModel:
             return (0.0, 0.0, 0.0, "no_fill")
         return self.limit_fill(s, intent)
 
-    def fill(self, snap: Any, intent: Any) -> FillTuple:
+    def fill(self, snap: Any, intent: Any) -> FillResult:
         ot = getattr(intent, 'order_type', getattr(intent, 'type', 'market'))
-        if ot=="market": return self.market_fill(snap, intent)
-        if ot=="limit": return self.limit_fill(snap, intent)
-        if ot=="stop": return self.stop_fill(snap, intent)
-        if ot=="stop-limit": return self.stop_limit_fill(snap, intent)
-        return (0.0,0.0,0.0,"no_fill")
+        if ot=="market":
+            p,q,s,st = self.market_fill(snap, intent)
+        elif ot=="limit":
+            p,q,s,st = self.limit_fill(snap, intent)
+        elif ot=="stop":
+            p,q,s,st = self.stop_fill(snap, intent)
+        elif ot=="stop-limit":
+            p,q,s,st = self.stop_limit_fill(snap, intent)
+        else:
+            p,q,s,st = (0.0,0.0,0.0,"no_fill")
+        return FillResult(price=p, filled_qty=q, slip_cost=s, status=st)
