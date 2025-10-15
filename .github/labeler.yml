@@ -1,0 +1,11 @@
+feature:
+  - '**/*.py'
+  - 'src/**'
+bug:
+  - '**/*fix*'
+docs:
+  - '**/*.md'
+chore:
+  - '.github/**'
+tests:
+  - 'tests/**'
