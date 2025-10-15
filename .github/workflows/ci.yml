@@ -1,0 +1,45 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov ruff black pip-audit
+      - name: Lint (ruff)
+        run: ruff check .
+      - name: Format (black)
+        run: black --check .
+      - name: Unit tests + coverage
+        run: pytest -q --cov=hcebt --cov-report=xml --cov-report=term-missing --maxfail=1
+      - name: Enforce coverage gate (>=80%)
+        run: python - << 'PY'
+import sys, xml.etree.ElementTree as ET
+root=ET.parse('coverage.xml').getroot()
+rate=float(root.attrib.get('line-rate','0'))
+pct=100.0*rate
+print(f'Coverage: {pct:.2f}%')
+sys.exit(0 if pct>=80.0 else 1)
+PY
+      - name: Security audit (pip-audit) – non-blocking
+        continue-on-error: true
+        run: pip-audit -r requirements.txt
+      - name: Secret scan (TruffleHog) – non-blocking
+        continue-on-error: true
+        uses: trufflesecurity/trufflehog@v3.78.0
+        with:
+          path: ./
+          entropy: true
+          branches: ""
+      - name: Upload coverage.xml
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml

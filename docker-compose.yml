@@ -1,0 +1,23 @@
+version: '3.8'
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    container_name: hce_clickhouse
+    ports: ["8123:8123","9000:9000"]
+    environment:
+      - CLICKHOUSE_DB=hce
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=
+    volumes:
+      - ./persistence/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+  timescaledb:
+    image: timescale/timescaledb-ha:pg16-latest
+    container_name: hce_timescale
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=hce
+    ports: ["5432:5432"]
+    volumes:
+      - ./persistence/timescale/init.sql:/docker-entrypoint-initdb.d/init.sql:ro

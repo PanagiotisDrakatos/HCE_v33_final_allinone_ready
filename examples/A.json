@@ -1,0 +1,28 @@
+[
+  {
+    "id": 1,
+    "ts": 1690000000000,
+    "symbol": "BTCUSDT",
+    "last": 30000.0,
+    "bid": 29999.5,
+    "ask": 30000.5,
+    "vol": 1200,
+    "type": "market",
+    "side": 1,
+    "qty": 0.1
+  },
+  {
+    "id": 2,
+    "ts": 1690000001000,
+    "symbol": "BTCUSDT",
+    "last": 30010.0,
+    "bid": 30009.5,
+    "ask": 30010.5,
+    "vol": 900,
+    "type": "limit",
+    "side": -1,
+    "qty": 0.2,
+    "limit": 30009.5,
+    "queue_pos": 0.3
+  }
+]

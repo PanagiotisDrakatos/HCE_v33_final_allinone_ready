@@ -1,0 +1,16 @@
+run_id: demo_run_003
+strat_id: breakout_v1
+commit_sha: cafe5eed
+fill:
+  slip_mode: bps
+  bps: 2.0
+  bid_ask_aware: true
+  seed: 777
+batch:
+  backend: none          # none|clickhouse|timescale
+  batch_size: 5000
+  flush_interval_ms: 500
+  queue_max_batches: 200
+  clickhouse_url: http://localhost:8123
+  timescale_dsn: postgresql://postgres:postgres@localhost:5432/hce
+  table: market_signals

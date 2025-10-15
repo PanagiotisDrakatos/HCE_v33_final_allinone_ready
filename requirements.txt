@@ -1,0 +1,9 @@
+pyyaml==6.0.2
+pydantic==2.9.2
+numpy==2.1.2
+pandas==2.2.3
+click==8.1.7
+pytest==8.3.2
+# Optional backends
+psycopg[binary]==3.2.1
+clickhouse-connect==0.7.15
