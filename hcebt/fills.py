@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Any, Mapping, Tuple
 import numpy as np
 
 @dataclass
@@ -22,26 +22,34 @@ class OrderIntent:
     tif: str = "GTC"
     queue_pos: float = 0.5  # 0=front,1=back
 
-@dataclass
-class FillResult:
-    filled_qty: float
-    avg_price: float
-    slip_cost: float
-    status: str  # filled|partial|no_fill|triggered
+# Return type alias used by public fill methods
+FillTuple = Tuple[float, float, float, str]
 
 class ShadowFillModel:
-    def __init__(self, slip_mode: str = "bps", ticks: float = 1.0, bps: float = 2.0, pct_spread: float = 0.5, hybrid_weight: float = 0.5, bid_ask_aware: bool=True, seed: int=42):
-        self.slip_mode = slip_mode
-        self.ticks = ticks
-        self.bps = bps
-        self.pct_spread = pct_spread
-        self.hybrid_weight = hybrid_weight
-        self.bid_ask_aware = bid_ask_aware
-        self.rng = np.random.default_rng(seed)
+    def __init__(self, slip_mode: Any = "bps", ticks: float = 1.0, bps: float = 2.0, pct_spread: float = 0.5, hybrid_weight: float = 0.5, bid_ask_aware: bool=True, seed: int=42):
+        # Allow passing a config object as the first positional arg
+        if not isinstance(slip_mode, str) and hasattr(slip_mode, "slip_mode"):
+            cfg = slip_mode
+            slip_mode = getattr(cfg, "slip_mode", "bps")
+            # tests provide tick_size and slip_value
+            ticks = getattr(cfg, "slip_value", ticks)
+            seed = getattr(cfg, "rng_seed", seed)
+            # optional extras if present
+            bid_ask_aware = getattr(cfg, "bid_ask_aware", bid_ask_aware)
+        self.slip_mode = str(slip_mode)
+        self.ticks = float(ticks)
+        self.bps = float(bps)
+        self.pct_spread = float(pct_spread)
+        self.hybrid_weight = float(hybrid_weight)
+        self.bid_ask_aware = bool(bid_ask_aware)
+        self.rng = np.random.default_rng(int(seed))
 
-    def _slip(self, snap: MarketSnapshot, side: int) -> float:
-        spread = max(snap.spread, 1e-9)
-        ref = snap.last if not self.bid_ask_aware else (snap.ask if side>0 else snap.bid)
+    def _slip(self, snap: Mapping[str, Any], side: int) -> float:
+        bid = float(snap.get("bid", snap.get("last", 0.0)))
+        ask = float(snap.get("ask", snap.get("last", 0.0)))
+        last = float(snap.get("last", (bid + ask) / 2 if (bid or ask) else 0.0))
+        spread = float(snap.get("spread", max(0.0, ask - bid)))
+        ref = last if not self.bid_ask_aware else (ask if side>0 else bid)
         if self.slip_mode == "fixed_ticks":
             return self.ticks * (1 if side>0 else -1)
         elif self.slip_mode == "bps":
@@ -57,60 +65,104 @@ class ShadowFillModel:
             return s if side>0 else -s
         return 0.0
 
-    def _prob_limit_fill(self, snap: MarketSnapshot, intent: OrderIntent) -> float:
-        touch = snap.ask if intent.side>0 else snap.bid
-        if intent.limit_price is None: return 0.0
-        price_edge = (touch - intent.limit_price) if intent.side>0 else (intent.limit_price - touch)
-        edge_score = 1.0 if price_edge>=0 else max(0.0, 1.0 + price_edge/max(snap.spread,1e-9))
-        vol_score = 1.0 - np.exp(-snap.volume / max(touch,1e-9))
-        queue_score = 1.0 - intent.queue_pos
+    def _prob_limit_fill(self, snap: Mapping[str, Any], intent: Any) -> float:
+        bid = float(snap.get("bid", 0.0)); ask = float(snap.get("ask", 0.0))
+        touch = ask if getattr(intent, 'side', 1) > 0 else bid
+        limit_price = getattr(intent, 'limit_price', None)
+        if limit_price is None:
+            return 0.0
+        price_edge = (touch - limit_price) if intent.side>0 else (limit_price - touch)
+        spread = float(snap.get("spread", max(0.0, ask - bid)))
+        last = float(snap.get("last", (bid + ask) / 2 if (bid or ask) else 0.0))
+        edge_score = 1.0 if price_edge>=0 else max(0.0, 1.0 + price_edge/max(spread,1e-9))
+        vol = float(snap.get("volume", 0.0))
+        ref = max(touch, 1e-9)
+        vol_score = 1.0 - float(np.exp(-vol / ref))
+        queue_pos = float(getattr(intent, 'queue_pos', 0.5))
+        queue_score = 1.0 - queue_pos
         prob = 0.3*edge_score + 0.4*vol_score + 0.3*queue_score
         return float(max(0.0, min(1.0, prob)))
 
-    def market_fill(self, snap: MarketSnapshot, intent: OrderIntent) -> FillResult:
-        ref = snap.last if not self.bid_ask_aware else (snap.ask if intent.side>0 else snap.bid)
-        slip = self._slip(snap, intent.side)
+    def _snap_to_mapping(self, snap: Any) -> Mapping[str, Any]:
+        if isinstance(snap, dict):
+            return snap
+        # assume dataclass-like
+        return {
+            "ts": getattr(snap, 'ts', 0),
+            "last": getattr(snap, 'last', 0.0),
+            "mark": getattr(snap, 'mark', getattr(snap, 'last', 0.0)),
+            "bid": getattr(snap, 'bid', getattr(snap, 'last', 0.0)),
+            "ask": getattr(snap, 'ask', getattr(snap, 'last', 0.0)),
+            "spread": getattr(snap, 'spread', None) if getattr(snap, 'spread', None) is not None else max(0.0, getattr(snap, 'ask', 0.0) - getattr(snap, 'bid', 0.0)),
+            "volume": getattr(snap, 'volume', 0.0),
+        }
+
+    def market_fill(self, snap: Any, intent: Any) -> FillTuple:
+        s = self._snap_to_mapping(snap)
+        side = int(getattr(intent, 'side', 1))
+        qty = float(getattr(intent, 'qty', 0.0))
+        bid = float(s.get("bid", 0.0)); ask = float(s.get("ask", 0.0)); last = float(s.get("last", 0.0))
+        ref = last if not self.bid_ask_aware else (ask if side>0 else bid)
+        slip = self._slip(s, side)
         price = ref + slip
-        slip_cost = abs(slip) * intent.qty
-        return FillResult(intent.qty, price, slip_cost, "filled")
+        slip_cost = abs(slip) * qty
+        return (price, qty, slip_cost, "filled")
 
-    def limit_fill(self, snap: MarketSnapshot, intent: OrderIntent) -> FillResult:
-        touch = snap.ask if intent.side>0 else snap.bid
-        if intent.limit_price is None: return FillResult(0.0,0.0,0.0,"no_fill")
-        marketable = (intent.side>0 and intent.limit_price>=touch) or (intent.side<0 and intent.limit_price<=touch)
-        prob = 1.0 if marketable else self._prob_limit_fill(snap, intent)
-        if prob <= 0.0: return FillResult(0.0,0.0,0.0,"no_fill")
-        filled = intent.qty if prob>=1.0 else float(self.rng.binomial(1000, prob)/1000.0 * intent.qty)
-        if filled <= 0.0: return FillResult(0.0,0.0,0.0,"no_fill")
-        base = min(intent.limit_price, touch) if intent.side>0 else max(intent.limit_price, touch)
-        slip = self._slip(snap, intent.side)
-        price = base + slip
-            # Clamp: respect limit price when not marketable
-            if not marketable:
-                if intent.side > 0:
-                    price = min(price, intent.limit_price)
-                else:
-                    price = max(price, intent.limit_price)
-        slip_cost = abs(slip) * filled
-        status = "filled" if filled>=intent.qty-1e-9 else "partial"
-        return FillResult(filled, price, slip_cost, status)
+    def limit_fill(self, snap: Any, intent: Any) -> FillTuple:
+        s = self._snap_to_mapping(snap)
+        side = int(getattr(intent, 'side', 1))
+        qty = float(getattr(intent, 'qty', 0.0))
+        limit_price = getattr(intent, 'limit_price', None)
+        bid = float(s.get("bid", 0.0)); ask = float(s.get("ask", 0.0))
+        if limit_price is None:
+            return (0.0, 0.0, 0.0, "no_fill")
+        touch = ask if side>0 else bid
+        marketable = (side>0 and limit_price>=touch) or (side<0 and limit_price<=touch)
+        # Non-marketable limit orders rest; do not fill now
+        if not marketable:
+            return (0.0, 0.0, 0.0, "resting")
+        # Marketable: execute at touch plus slip but never violate the limit price
+        slip = self._slip(s, side)
+        raw_price = touch + slip
+        if side > 0:
+            price = min(raw_price, float(limit_price))
+        else:
+            price = max(raw_price, float(limit_price))
+        filled = qty
+        # Use actual distance from touch as slip cost
+        slip_cost = abs(price - touch) * filled
+        status = "filled"
+        return (price, filled, slip_cost, status)
 
-    def stop_fill(self, snap: MarketSnapshot, intent: OrderIntent) -> FillResult:
-        if intent.stop_price is None: return FillResult(0.0,0.0,0.0,"no_fill")
-        trig = (intent.side>0 and snap.last>=intent.stop_price) or (intent.side<0 and snap.last<=intent.stop_price)
-        if not trig: return FillResult(0.0,0.0,0.0,"no_fill")
-        fr = self.market_fill(snap, intent); fr.status = "triggered"; return fr
+    def stop_fill(self, snap: Any, intent: Any) -> FillTuple:
+        s = self._snap_to_mapping(snap)
+        stop_price = getattr(intent, 'stop_price', None)
+        if stop_price is None:
+            return (0.0, 0.0, 0.0, "no_fill")
+        side = int(getattr(intent, 'side', 1))
+        last = float(s.get("last", 0.0))
+        trig = (side>0 and last>=stop_price) or (side<0 and last<=stop_price)
+        if not trig:
+            return (0.0, 0.0, 0.0, "no_fill")
+        price, qty, slip_cost, _ = self.market_fill(s, intent)
+        return (price, qty, slip_cost, "triggered")
 
-    def stop_limit_fill(self, snap: MarketSnapshot, intent: OrderIntent) -> FillResult:
-        if intent.stop_price is None: return FillResult(0.0,0.0,0.0,"no_fill")
-        trig = (intent.side>0 and snap.last>=intent.stop_price) or (intent.side<0 and snap.last<=intent.stop_price)
-        if not trig: return FillResult(0.0,0.0,0.0,"no_fill")
-        return self.limit_fill(snap, intent)
+    def stop_limit_fill(self, snap: Any, intent: Any) -> FillTuple:
+        s = self._snap_to_mapping(snap)
+        stop_price = getattr(intent, 'stop_price', None)
+        if stop_price is None:
+            return (0.0, 0.0, 0.0, "no_fill")
+        side = int(getattr(intent, 'side', 1))
+        last = float(s.get("last", 0.0))
+        trig = (side>0 and last>=stop_price) or (side<0 and last<=stop_price)
+        if not trig:
+            return (0.0, 0.0, 0.0, "no_fill")
+        return self.limit_fill(s, intent)
 
-    def fill(self, snap: MarketSnapshot, intent: OrderIntent) -> FillResult:
-        ot = intent.order_type
+    def fill(self, snap: Any, intent: Any) -> FillTuple:
+        ot = getattr(intent, 'order_type', getattr(intent, 'type', 'market'))
         if ot=="market": return self.market_fill(snap, intent)
         if ot=="limit": return self.limit_fill(snap, intent)
         if ot=="stop": return self.stop_fill(snap, intent)
         if ot=="stop-limit": return self.stop_limit_fill(snap, intent)
-        return FillResult(0.0,0.0,0.0,"no_fill")
+        return (0.0,0.0,0.0,"no_fill")

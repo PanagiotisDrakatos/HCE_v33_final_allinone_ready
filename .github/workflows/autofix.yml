@@ -1,0 +1,47 @@
+name: AutoFix (ruff/black) → PR
+on:
+  pull_request:
+    branches: [ main, master, develop, dev ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  autofix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install black ruff
+
+      - name: Ruff --fix (safe)
+        run: ruff check . --fix || true
+
+      - name: Black format (safe)
+        run: black . || true
+
+      - name: Create PR with fixes
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "chore(autofix): apply ruff/black fixes [skip ci]"
+          title: "Autofix: ruff/black"
+          body: |
+            Automated ruff/black fixes (safe subset).
+            Review and merge if OK.
+          branch: ci/autofix
+          delete-branch: true
+
