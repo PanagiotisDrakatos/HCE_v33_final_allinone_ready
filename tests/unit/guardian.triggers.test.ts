@@ -1,5 +1,5 @@
-import { AdminToggles } from '../../src/guardian/sidecar';
-import { evaluateTrigger, type Trigger } from '../../src/guardian/triggers';
+import { AdminToggles } from '../../src/guardian/sidecar.js';
+import { evaluateTrigger, type Trigger } from '../../src/guardian/triggers.js';
 
 describe('Guardian triggers', () => {
   it('fires when value meets threshold', () => {
