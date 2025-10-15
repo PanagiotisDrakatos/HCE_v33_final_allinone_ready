@@ -21,13 +21,13 @@ jobs:
         run: pytest -q --cov=hcebt --cov-report=xml --cov-report=term-missing --maxfail=1
       - name: Enforce coverage gate (>=80%)
         run: python - << 'PY'
-import sys, xml.etree.ElementTree as ET
-root=ET.parse('coverage.xml').getroot()
-rate=float(root.attrib.get('line-rate','0'))
-pct=100.0*rate
-print(f'Coverage: {pct:.2f}%')
-sys.exit(0 if pct>=80.0 else 1)
-PY
+          import sys, xml.etree.ElementTree as ET
+          root=ET.parse('coverage.xml').getroot()
+          rate=float(root.attrib.get('line-rate','0'))
+          pct=100.0*rate
+          print(f'Coverage: {pct:.2f}%')
+          sys.exit(0 if pct>=80.0 else 1)
+        PY
       - name: Security audit (pip-audit) – non-blocking
         continue-on-error: true
         run: pip-audit -r requirements.txt
@@ -43,3 +43,13 @@ PY
         with:
           name: coverage-xml
           path: coverage.xml
+  node-build:
+    runs-on: ubuntu-latest
+    if: ${{ hashFiles('package.json') != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install deps
+        run: npm install
