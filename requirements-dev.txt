@@ -1,0 +1,4 @@
+# Development-only tools (pinned)
+black==24.10.0
+ruff==0.14.0
+
