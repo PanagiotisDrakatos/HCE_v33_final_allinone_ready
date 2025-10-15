@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.dylib
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Coverage
+.coverage
+coverage.xml
+htmlcov/
+
+# Node/TS
+node_modules/
+dist/
+coverage/
+.tsbuildinfo
+
+# IDE/Editor
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
