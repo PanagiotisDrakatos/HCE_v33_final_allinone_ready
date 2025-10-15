@@ -78,3 +78,57 @@ jobs:
             .pytest_cache/
             reports/
             logs/
+
+  test-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install ruff black
+
+      - name: Apply autofix (ruff/black)
+        run: |
+          ruff check . --fix || true
+          black . || true
+
+      - name: Lint (ruff, no-fix)
+        run: ruff check .
+
+      - name: Run tests (pytest)
+        run: pytest
+
+      - name: Commit & push only if all checks passed
+        if: ${{ success() }}
+        run: |
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git config user.name "HCE AutoFix Bot"
+            git config user.email "autofix@bot.local"
+            git add -A
+            git commit -m "chore(hce): auto-fix ruff/black after green CI"
+            git push
+          else
+            echo "No changes to commit."
+          fi
+
+      - name: Upload coverage & junit (if any)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hce-ci-artifacts
+          path: |
+            coverage/
+            coverage.xml
+            .coverage
+            logs/
