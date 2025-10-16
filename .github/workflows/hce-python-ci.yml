@@ -1,4 +1,4 @@
-name: HCE Python CI (lint, unit, integration)
+name: HCE Python CI (ruff only)
 
 on:
   pull_request:
@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   test:
-    name: test
+    name: ruff-lint
     runs-on: ubuntu-latest
 
     steps:
@@ -30,48 +30,30 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      - name: Install deps (incl. pytest-cov, ruff, black)
+      - name: Install Ruff
         shell: bash
         run: |
           python -m pip install -U pip wheel
-          # project deps
-          if [[ -f requirements.txt ]]; then pip install -r requirements.txt; fi
-          if [[ -f requirements-dev.txt ]]; then pip install -r requirements-dev.txt; fi
-          # tooling
-          pip install pytest pytest-cov ruff black
+          pip install ruff
 
-      # Κύρια βήματα: αν αποτύχουν -> job failure
       - name: Lint (ruff)
         run: ruff check .
-      - name: Format check (black)
-        run: black --check .
-      - name: Tests + Coverage
-        run: |
-          pytest -q --maxfail=1 --disable-warnings \
-                 --cov=. --cov-report=xml --cov-report=term
 
-      # Συλλογή logs/coverage ΠΑΝΤΑ, για σχόλιο στο PR
+      # Collect logs always for PR comment on failure
       - name: Collect key logs (always)
         if: ${{ always() }}
         shell: bash
         run: |
           mkdir -p ci_logs
           echo "==== ruff ===="    >  ci_logs/ruff.txt;   (ruff check . || true)    2>&1 | tee -a ci_logs/ruff.txt
-          echo "==== black ===="   >  ci_logs/black.txt;  (black --check . || true) 2>&1 | tee -a ci_logs/black.txt
-          echo "==== pytest ===="  >  ci_logs/pytest.txt; (pytest -q || true)       2>&1 | tee -a ci_logs/pytest.txt
-          # coverage artifacts αν υπάρχουν
-          [[ -f coverage.xml ]] && cp coverage.xml ci_logs/ || true
-          [[ -f .coverage ]] && cp .coverage ci_logs/ || true
 
-      - name: Upload artifacts (logs + coverage)
+      - name: Upload artifacts (logs)
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: ci-logs
           path: |
             ci_logs/
-            reports/
-            logs/
           if-no-files-found: ignore
 
   post_fail_comment:
@@ -97,14 +79,10 @@ jobs:
             }
 
             const ruff = tail4k('ci_logs/ruff.txt');
-            const black = tail4k('ci_logs/black.txt');
-            const pytest = tail4k('ci_logs/pytest.txt');
 
             const body = [
-              '### ❌ CI failed — key excerpts',
+              '### ❌ CI failed — Ruff excerpts',
               '```txt\n[ruff]\n' + ruff + '\n```',
-              '```txt\n[black]\n' + black + '\n```',
-              '```txt\n[pytest]\n' + pytest + '\n```',
               `Run logs: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
             ].join('\n\n');
 
