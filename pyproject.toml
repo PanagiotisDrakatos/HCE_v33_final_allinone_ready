@@ -26,6 +26,15 @@ line-length = 100
 fix = true
 cache-dir = ".ruff_cache"
 show-fixes = true
-exclude = ["venv", ".venv", "build", "dist", "migrations", "__pycache__"]
-
-
+exclude = [
+    "venv",
+    ".venv",
+    ".venv_ruff",
+    ".venv-ruff",
+    ".venv-ruff-*",
+    ".ruff_cache",
+    "build",
+    "dist",
+    "migrations",
+    "__pycache__",
+]
