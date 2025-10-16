@@ -43,7 +43,7 @@ jobs:
           python -m pip install -U pip
           pip install -e .  # 🛠 install local package (resolves ModuleNotFoundError)
           pip install -r requirements.txt -r requirements-dev.txt
-          pip install pytest-xdist
+          pip install pytest-xdist ruff black
 
       - name: Detect changed Python files
         id: diff
@@ -79,10 +79,20 @@ jobs:
             black --check .
           fi
 
-      - name: Run Unit Tests with Coverage
+      - name: Verify pytest plugins
+        run: pytest --version --trace-config
+
+      - name: Run Unit Tests with Coverage (auto-detect xdist)
         run: |
-          pytest -q -n auto -m "not integration" \
-            --cov=hcebt --cov=lib --cov-report=xml
+          if pytest --version --trace-config 2>&1 | grep -Ei '(^|[ ,])xdist( |-|,|$)' >/dev/null; then
+            echo "xdist detected: running with -n auto"
+            PARALLEL="-n auto"
+          else
+            echo "xdist not detected: running without -n"
+            PARALLEL=""
+          fi
+          pytest -q ${PARALLEL} -m "not integration" \
+            --cov=hcebt --cov-report=xml
 
       - name: Upload coverage to Codecov (main only)
         if: github.ref == 'refs/heads/main'
