@@ -1,0 +1,37 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "incremental": true,
+    "tsBuildInfoFile": ".tsbuildinfo",
+    "outDir": "dist",
+    "rootDir": ".",
+    "types": ["node", "jest"]
+  },
+  "include": [
+    "src/core",
+    "src/agents",
+    "src/ws",
+    "src/db",
+    "src/risk",
+    "src/exchanges",
+    "tests"
+  ],
+  "exclude": [
+    "dist",
+    "coverage",
+    "node_modules",
+    "old_versions",
+    "legacy",
+    "mocks",
+    "__mocks__",
+    "__fixtures__",
+    "experimental"
+  ]
+}

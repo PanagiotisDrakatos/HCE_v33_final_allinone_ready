@@ -1,0 +1,73 @@
+name: PR Lint Suggestions (disabled)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  ruff_review:
+    if: ${{ false }} # disabled; replaced by PR Lite
+    name: Ruff Suggestion Bot
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ruff & reviewdog
+        run: |
+          pip install ruff
+          curl -sfL https://raw.githubusercontent.com/reviewdog/reviewdog/master/install.sh | sh -s -- -b ./bin
+        env:
+          REVIEWDOG_VERSION: latest
+
+      - name: Run ruff and report with reviewdog
+        if: env.ACT != 'true'
+        run: |
+          ruff check --format=github . | ./bin/reviewdog -f=github -reporter=github-pr-review -filter-mode=diff
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run ruff locally (act mode)
+        if: env.ACT == 'true'
+        run: |
+          echo "[act] Running ruff locally (no PR comments will be posted)"
+          ruff check .
+
+  black_review:
+    if: ${{ false }} # disabled; replaced by PR Lite
+    name: Black Suggestion Bot
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install black & reviewdog
+        run: |
+          pip install black
+          curl -sfL https://raw.githubusercontent.com/reviewdog/reviewdog/master/install.sh | sh -s -- -b ./bin
+        env:
+          REVIEWDOG_VERSION: latest
+
+      - name: Run black and report with reviewdog
+        if: env.ACT != 'true'
+        run: |
+          black --check --diff . | ./bin/reviewdog -efm="%f:%l:%c: %m" -name="black" -reporter=github-pr-review -filter-mode=diff
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run black locally (act mode)
+        if: env.ACT == 'true'
+        run: |
+          echo "[act] Running black --check --diff locally (no PR comments will be posted)"
+          black --check --diff .

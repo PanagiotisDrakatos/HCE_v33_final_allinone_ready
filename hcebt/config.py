@@ -1,7 +1,9 @@
-from pydantic import BaseModel, Field
-from typing import Literal, Optional
+from typing import Literal
 
-SlipMode = Literal["fixed_ticks","bps","pct_spread","hybrid"]
+from pydantic import BaseModel, Field
+
+SlipMode = Literal["fixed_ticks", "bps", "pct_spread", "hybrid"]
+
 
 class FillConfig(BaseModel):
     slip_mode: SlipMode = "bps"
@@ -12,8 +14,9 @@ class FillConfig(BaseModel):
     bid_ask_aware: bool = True
     seed: int = 42
 
+
 class BatchConfig(BaseModel):
-    backend: Literal["none","clickhouse","timescale"] = "none"
+    backend: Literal["none", "clickhouse", "timescale"] = "none"
     batch_size: int = 5000
     flush_interval_ms: int = 500
     queue_max_batches: int = 200
@@ -21,9 +24,10 @@ class BatchConfig(BaseModel):
     timescale_dsn: str = "postgresql://postgres:postgres@localhost:5432/hce"
     table: str = "market_signals"
 
+
 class RunConfig(BaseModel):
     run_id: str
     strat_id: str = "default"
-    commit_sha: Optional[str] = None
+    commit_sha: str | None = None
     fill: FillConfig = Field(default_factory=FillConfig)
     batch: BatchConfig = Field(default_factory=BatchConfig)

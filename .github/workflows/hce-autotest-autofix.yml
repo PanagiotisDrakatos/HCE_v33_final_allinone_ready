@@ -1,10 +1,7 @@
 name: HCE Python CI (lint, unit, integration)
 
 on:
-  push:
-    branches: [ main, dev ]
-  pull_request:
-    branches: [ main, dev ]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -17,24 +14,25 @@ jobs:
   test:
     runs-on: ubuntu-latest
     env:
-      IT_TIMESCALE: '1'
-      IT_CLICKHOUSE: '1'
+      IT_TIMESCALE: "1"
+      IT_CLICKHOUSE: "1"
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Set up Python 3.11
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          cache: 'pip'
+          python-version: "3.12"
+          cache: "pip"
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install black ruff pytest-cov pip-audit
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+          pip install pip-audit
 
       - name: Lint (ruff)
         run: ruff check .
@@ -42,8 +40,10 @@ jobs:
       - name: Format check (black)
         run: black --check .
 
-      - name: Unit tests (no integration)
-        run: pytest -q
+      - name: Unit tests (no integration) + coverage
+        run: |
+          pytest -q -m "not integration" \
+            --cov=hcebt --cov=lib --cov-report=xml --cov-report=term-missing
 
       - name: Start DB services (Docker Compose)
         run: |
@@ -55,9 +55,8 @@ jobs:
           echo "Waiting for ClickHouse..."
           for i in {1..60}; do
             if curl -fsS http://127.0.0.1:8123/ping | grep -qi "ok"; then echo "ClickHouse ready"; break; fi; sleep 2; done
-
       - name: Integration tests
-        run: pytest -q -m integration
+        run: pytest -q -m "integration"
 
       - name: Security audit (pip-audit) [non-blocking]
         continue-on-error: true
@@ -77,4 +76,47 @@ jobs:
             .coverage
             .pytest_cache/
             reports/
+            logs/
+
+  test-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+
+      - name: Apply autofix (ruff/black)
+        id: autofix
+        uses: reviewdog/action-autofix@v1
+        with:
+          workdir: .
+          reviewdog_flags: -filter-mode=diff_context -fail-on-error -reporter=github-pr-review
+          tool_name: ruff
+          ruff_opts: --fix
+          black_opts: ""
+
+      - name: Run tests (pytest)
+        run: pytest -m "not integration"
+
+      - name: Upload coverage & junit (if any)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hce-ci-artifacts
+          path: |
+            coverage/
+            coverage.xml
+            .coverage
             logs/

@@ -1,0 +1,168 @@
+Metadata-Version: 2.4
+Name: hcebt
+Version: 0.0.0
+Summary: HCE backtest engine
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+
+# HCE Backtest & A/B — v3.3 (All‑in‑One)
+
+[![CI](https://github.com/PanagiotisDrakatos/HCE_v33_final_allinone_ready/actions/workflows/ci.yml/badge.svg)](https://github.com/PanagiotisDrakatos/HCE_v33_final_allinone_ready/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/PanagiotisDrakatos/HCE_v33_final_allinone_ready/branch/main/graph/badge.svg)](https://codecov.io/gh/PanagiotisDrakatos/HCE_v33_final_allinone_ready)
+
+**Ημερομηνία:** 2025-10-15
+
+Περιλαμβάνει *όλα* σε ένα πακέτο:
+- Shadow fill model (last/mark, bid/ask aware), slippage modes: fixed_ticks, bps, pct_spread, hybrid
+- Order types: market, limit (queue/partials), stop, stop-limit
+- Deterministic A/B (seed + stable event order)
+- Repository abstraction (none|clickhouse|timescale) με batch writer, idempotent upserts, back-pressure
+- Docker compose για ClickHouse / Timescale (με DDLs)
+- Kahan summation στα reductions + UTC ISO normalizer
+- JSON logs, metrics counters, tests (unit/golden + integration smoke)
+
+## Quick start
+```bash
+pip install -r requirements.txt
+# Optional: bring up DBs
+docker compose up -d
+# Run demo A/B
+python backtest.py run --config examples/cfg.yaml --ab examples/A.json examples/B.json
+# Run tests
+pytest -q
+```
+
+## Χρήσιμες εντολές από εδώ και πέρα
+
+Lint
+- ruff check .
+- pylint hcebt
+
+Format
+- black .
+
+Tests
+- pytest -q
+
+Προαιρετικό: Κάν’ το μόνιμο & reproducible
+
+Makefile (βάλε το στη ρίζα του repo):
+
+```
+VENVDIR ?= .venv
+PY      := $(VENVDIR)/bin/python
+PIP     := $(VENVDIR)/bin/pip
+
+.PHONY: venv install dev check lint fmt test
+venv:
+	@test -d $(VENVDIR) || python3 -m venv $(VENVDIR)
+
+install: venv
+	$(PIP) install -r requirements.txt
+
+dev: venv
+	$(PIP) install pylint==2.17.4 ruff black
+
+check: lint test
+
+lint:
+	$(VENVDIR)/bin/ruff check .
+	$(VENVDIR)/bin/pylint hcebt || true
+
+fmt:
+	$(VENVDIR)/bin/black .
+
+test:
+	$(VENVDIR)/bin/pytest -q
+```
+
+Τότε:
+- make dev
+- make check
+
+Συνηθισμένα gotchas
+- Αν το prompt σου δεν δείχνει (.venv) αλλά το which python δείχνει .venv/bin/python, είσαι ΟΚ — το indicator στο prompt είναι μόνο visual.
+- Μην ξαναχρησιμοποιείς sudo pip ή --break-system-packages για αυτό το project. Ό,τι χρειάζεσαι μπαίνει στο .venv.
+- Σε fish χρησιμοποίησε source .venv/bin/activate.fish.
+- Θες να σου ρίξω κι ένα .vscode/settings.json ώστε ο VS Code να βλέπει αυτόματα το .venv interpreter;
+
+## Resolve autofix conflicts during cherry-pick (WSL/Ubuntu)
+
+Έτοιμο script για να λύνει conflicts από ruff/black autofix κατά το `git cherry-pick`, κρατώντας by default το "theirs" για αρχεία `.py` και config, και συνεχίζει αυτόματα το cherry-pick.
+
+- Script: `scripts/resolve-autofix-conflicts.sh`
+- Τρέχεις το παρακάτω μέσα από WSL/Ubuntu, από το root του repo:
+
+```bash
+# WSL path για το repo
+cd /mnt/c/Users/User/Documents/GitHub/HCE_v33_final_allinone_ready
+
+# αν δεν υπάρχει, φτιάξε τον φάκελο
+mkdir -p scripts
+
+# κάνε executable (μία φορά)
+chmod +x scripts/resolve-autofix-conflicts.sh
+
+# χρήση όταν κολλάει cherry-pick από autofix conflicts
+scripts/resolve-autofix-conflicts.sh
+```
+
+Options:
+- `--dry-run` μόνο προεπισκόπηση (δεν αλλάζει τίποτα)
+- `--verbose` έξτρα logging
+- `--keep-ours` κράτα "ours" για business code, "theirs" για tests/configs
+
+Παράδειγμα:
+```bash
+scripts/resolve-autofix-conflicts.sh --dry-run --verbose
+scripts/resolve-autofix-conflicts.sh --keep-ours
+```
+
+Optional:
+- Git alias
+  ```bash
+  git config --global alias.resolve-autofix '!bash scripts/resolve-autofix-conflicts.sh'
+  # μετά: git resolve-autofix
+  ```
+- Μείωση conflicts
+  ```bash
+  git config --global rerere.enabled true
+  git config --global core.autocrlf input
+  # .gitattributes έχει ήδη: * text=auto eol=lf
+  ```
+
+## CI: Autofix (ruff/black)
+
+Στο `.github/workflows/autofix.yml` υπάρχει workflow που τρέχει ruff/black:
+- Σε pull requests: εκτελεί format, αλλά δεν κάνει push (ασφαλές για forks).
+- Σε push προς `main`/`master`: αν βρει αλλαγές από format, τις κάνει commit & push αυτόματα.
+
+Για να το απενεργοποιήσεις, σβήσε το αρχείο ή άλλαξε τα triggers στο `on:` section.
+
+## Audit του repo (v3.3 all‑in‑one)
+
+1) Τι περιλαμβάνει η v3.3
+- Fill engine (ShadowFillModel) με modes: `fixed_ticks`, `bps`, `pct_spread`, `hybrid`, και bid/ask‑aware λογική· υλοποιεί `market/limit/stop/stop‑limit`.
+- Deterministic A/B: σταθερή ταξινόμηση γεγονότων + seed.
+- Persistence: `none | clickhouse | timescale` με batching, back‑pressure, in‑batch dedupe, Timescale upsert.
+- Docker compose για ClickHouse / Timescale (με DDLs).
+- Kahan summation, UTC ISO normalizer, tests (unit + integration).
+- CI workflows για lint/format/autofix/release.
+
+2) Σύγκριση/ποιότητα
+- Καλό separation of concerns (fills ↔ runner ↔ repo).
+- Determinism & reproducibility (config snapshot σε `run_artifacts/<run>_config.json`).
+- Production‑friendly persistence (retries, upsert).
+
+3) Κόκκινες σημαίες που βρέθηκαν (και διορθώθηκαν εδώ όπου ήταν ασφαλές)
+- Κενό `package.json` → έγινε ελάχιστο έγκυρο.
+- Διορθώσεις lint: imports, semicolons, assigned lambdas, pyupgrade.
+- Αυστηροποίηση `lib/timeutil.py` για invalid ISO timestamps (raise).
+
+4) Προτάσεις
+- Coverage gate στο pytest, dev tools (pip-audit, trufflehog, pre-commit).
+- Προαιρετικά Dockerfile για ενοποίηση.
+- Validators στο `hcebt/config.py` για ranges.
+
+5) Sanity run με τα παραδείγματα
+- Α/B ροή ok, persistence "none" δουλεύει, metrics ενημερώνονται.

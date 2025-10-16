@@ -1,0 +1,8 @@
+# Default container image mapping for act to emulate ubuntu-latest runners
+-P ubuntu-latest=ghcr.io/catthehacker/ubuntu:act-latest
+-P ubuntu-22.04=ghcr.io/catthehacker/ubuntu:act-22.04
+-P ubuntu-20.04=ghcr.io/catthehacker/ubuntu:act-20.04
+# Use a local secrets file by default
+--secret-file .secrets
+# Ensure workflows recognize act mode
+--env ACT=true

@@ -1,0 +1,10 @@
+dist
+coverage
+node_modules
+old_versions
+legacy
+mocks
+__mocks__
+__fixtures__
+experimental
+
