@@ -2,5 +2,4 @@
 black==24.10.0
 ruff==0.14.0
 pip-audit==2.7.3
-truffleHog==2.2.1
 pre-commit==4.0.1
