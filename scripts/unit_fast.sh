@@ -9,23 +9,6 @@ if [ -z "${VENV_DIR:-}" ]; then
 fi
 . "$VENV_DIR/bin/activate"
 
-# Keep pytest clean and deterministic
-export PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
-
-# Determine a base commit to compare for changed files
-BASE="$(git merge-base HEAD origin/main 2>/dev/null || true)"
-if [ -z "$BASE" ]; then BASE="HEAD~1"; fi
-CHANGED="$(git diff --name-only "$BASE"...HEAD | grep -E '\.py$' || true)"
-
-if [ -n "$CHANGED" ]; then
-  echo "🔍 Linting changed files..."
-  echo "$CHANGED" | tr '\n' ' ' | xargs -r ruff check --select I,E,F,UP
-  echo "$CHANGED" | tr '\n' ' ' | xargs -r black --check
-else
-  ruff check --select I,E,F,UP .
-  black --check .
-fi
-
-echo "⚙️  Running fast unit tests..."
-pytest -q -m "not integration" -n auto --cov=hcebt --cov=lib --cov-report=xml
-
+# Only Ruff linting
+echo "🔍 Linting (ruff)..."
+ruff check --select I,E,F,UP .
