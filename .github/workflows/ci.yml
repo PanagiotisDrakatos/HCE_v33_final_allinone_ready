@@ -160,7 +160,7 @@ jobs:
   ci_logs:
     name: Collect CI logs (ruff/black/pytest)
     runs-on: ubuntu-latest
-    needs: [lint_and_unit, integration]
+    needs: [lint_and_unit]
     if: ${{ always() }}
     steps:
       - uses: actions/checkout@v4
@@ -186,7 +186,7 @@ jobs:
 
   post_fail_comment:
     name: PR comment with CI excerpts
-    needs: [lint_and_unit, integration, ci_logs]
+    needs: [ci_logs]
     if: ${{ failure() && github.event_name == 'pull_request' && env.ACT != 'true' }}
     runs-on: ubuntu-latest
     permissions:
