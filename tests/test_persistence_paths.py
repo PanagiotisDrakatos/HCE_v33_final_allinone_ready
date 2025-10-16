@@ -14,12 +14,16 @@ def test_flush_happy_path_background_loop():
     repo._flush = flush_capture  # type: ignore
     try:
         repo.start()
-        repo.submit([
-            {"run_id": "r", "ts": 1, "symbol": "X", "metric": "m", "val": 1},
-        ])
-        repo.submit([
-            {"run_id": "r", "ts": 2, "symbol": "X", "metric": "m", "val": 2},
-        ])
+        repo.submit(
+            [
+                {"run_id": "r", "ts": 1, "symbol": "X", "metric": "m", "val": 1},
+            ]
+        )
+        repo.submit(
+            [
+                {"run_id": "r", "ts": 2, "symbol": "X", "metric": "m", "val": 2},
+            ]
+        )
         time.sleep(0.3)
     finally:
         repo.stop()
@@ -37,7 +41,7 @@ def test_flush_retries_and_error_metric_increments():
 
     # Force ClickHouse pathway to exercise retry loop
     repo.repo = ("ch", FailingClient())
-    rows = [{"run_id":"r","ts":1,"symbol":"X","metric":"m","val":1}]
+    rows = [{"run_id": "r", "ts": 1, "symbol": "X", "metric": "m", "val": 1}]
 
     t0 = time.time()
     repo._flush(rows)  # will attempt up to 5 times then give up
@@ -63,12 +67,13 @@ def test_stop_performs_final_flush():
     try:
         repo.start()
         # enqueue a small batch that will remain buffered (batch_size not reached; timeout long)
-        repo.submit([
-            {"run_id": "r", "ts": 1, "symbol": "X", "metric": "m", "val": 1},
-        ])
+        repo.submit(
+            [
+                {"run_id": "r", "ts": 1, "symbol": "X", "metric": "m", "val": 1},
+            ]
+        )
         # give time for queue to be drained into internal buffer
         time.sleep(0.1)
     finally:
         repo.stop()  # should trigger final flush of remaining buffer
     assert calls["n"] >= 1
-

@@ -1,3 +1,10 @@
+Metadata-Version: 2.4
+Name: hcebt
+Version: 0.0.0
+Summary: HCE backtest engine
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+
 # HCE Backtest & A/B — v3.3 (All‑in‑One)
 
 **Ημερομηνία:** 2025-10-15

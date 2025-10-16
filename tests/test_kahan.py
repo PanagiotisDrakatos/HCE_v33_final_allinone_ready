@@ -1,4 +1,6 @@
 from lib.kahan import KahanSum
+
+
 def test_kahan_sum():
     ks = KahanSum()
     for _ in range(100000):
