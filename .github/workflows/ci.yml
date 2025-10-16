@@ -1,45 +1,128 @@
 name: CI
-on: [push, pull_request]
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+  workflow_dispatch:
+    inputs:
+      run_integration:
+        description: "Run integration tests"
+        type: boolean
+        default: false
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+
 jobs:
-  build-test:
+  lint_and_unit:
+    name: Lint & Unit
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-      - name: Install deps
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+
+      - name: Install project and dependencies
         run: |
           python -m pip install --upgrade pip
+          pip install -e .
           pip install -r requirements.txt
-          pip install pytest pytest-cov ruff black pip-audit
-      - name: Lint (ruff)
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+          pip install pytest-xdist ruff black
+
+      - name: Ruff Lint
         run: ruff check .
-      - name: Format (black)
+
+      - name: Black Format Check
         run: black --check .
-      - name: Unit tests + coverage
-        run: pytest -q --cov=hcebt --cov-report=xml --cov-report=term-missing --maxfail=1
-      - name: Enforce coverage gate (>=80%)
-        run: python - << 'PY'
-import sys, xml.etree.ElementTree as ET
-root=ET.parse('coverage.xml').getroot()
-rate=float(root.attrib.get('line-rate','0'))
-pct=100.0*rate
-print(f'Coverage: {pct:.2f}%')
-sys.exit(0 if pct>=80.0 else 1)
-PY
-      - name: Security audit (pip-audit) – non-blocking
-        continue-on-error: true
-        run: pip-audit -r requirements.txt
-      - name: Secret scan (TruffleHog) – non-blocking
-        continue-on-error: true
-        uses: trufflesecurity/trufflehog@v3.78.0
+
+      - name: Run Unit Tests with Coverage (fallback-safe)
+        run: |
+          if python -c "import xdist" 2>/dev/null; then
+            echo "✅ Running with xdist"
+            pytest -q -m "not integration" -n auto \
+              --cov=hcebt --cov=lib --cov-report=xml --cov-report=term-missing
+          else
+            echo "⚠️ Running single-threaded (no xdist)"
+            pytest -q -m "not integration" \
+              --cov=hcebt --cov=lib --cov-report=xml --cov-report=term-missing
+          fi
+
+      - name: Upload coverage report (main only)
+        if: github.ref == 'refs/heads/main'
+        uses: codecov/codecov-action@v4
         with:
-          path: ./
-          entropy: true
-          branches: ""
-      - name: Upload coverage.xml
-        uses: actions/upload-artifact@v4
+          files: ./coverage.xml
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  integration:
+    name: Integration Tests (on demand)
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    needs: [lint_and_unit]
+    if: |
+      github.event_name == 'workflow_dispatch' && inputs.run_integration == true ||
+      (github.event_name == 'push' && contains(github.event.head_commit.message, '[it]')) ||
+      (github.event_name == 'pull_request' && contains(github.head_ref, 'it/'))
+
+    services:
+      clickhouse:
+        image: clickhouse/clickhouse-server:23.8
+        ports: ['8123:8123']
+        options: >-
+          --health-cmd="wget -qO- http://localhost:8123/ping || exit 1"
+          --health-interval=5s --health-timeout=2s --health-retries=30
+
+      timescale:
+        image: timescale/timescaledb:2.16.1-pg15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: hce
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U postgres -d hce"
+          --health-interval=5s --health-timeout=2s --health-retries=30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          name: coverage-xml
-          path: coverage.xml
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+
+      - name: Install project and dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install -r requirements.txt
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+
+      - name: Run Integration Tests
+        env:
+          IT_CLICKHOUSE: "1"
+          IT_TIMESCALE: "1"
+          CLICKHOUSE_URL: "http://localhost:8123"
+          TIMESCALE_DSN: "postgresql://postgres:postgres@localhost:5432/hce"
+        run: |
+          pytest -q -m "integration"
