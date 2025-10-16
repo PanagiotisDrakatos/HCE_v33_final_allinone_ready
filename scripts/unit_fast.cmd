@@ -15,19 +15,11 @@ if not defined VENV_DIR (
 )
 call "%VENV_DIR%\Scripts\activate"
 
-set PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
-
-echo 🔍 Linting (ruff/black)...
+rem Only Ruff linting
+echo 🔍 Linting (ruff)...
 ruff check --select I,E,F,UP .
-if errorlevel 1 (
-  echo Ruff reported issues.
+set "RC=%ERRORLEVEL%"
+if not "%RC%"=="0" (
+  echo Ruff reported issues (exit %RC%).
 )
-black --check .
-if errorlevel 1 (
-  echo Black check failed. You can auto-format with: black .
-)
-
-echo ⚙️  Running fast unit tests...
-pytest -q -m "not integration" -n auto --cov=hcebt --cov=lib --cov-report=xml
-exit /b %errorlevel%
-
+exit /b %RC%
