@@ -1,4 +1,3 @@
-README.md
 README.txt
 pyproject.toml
 ./hcebt/__init__.py
