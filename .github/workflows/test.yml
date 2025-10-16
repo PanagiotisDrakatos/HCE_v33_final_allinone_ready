@@ -1,13 +1,11 @@
-name: Run Unit Tests
+name: Run Unit Tests (disabled)
 
 on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   test:
+    if: ${{ false }} # disabled in favor of Push Full workflow
     runs-on: ubuntu-latest
 
     steps:

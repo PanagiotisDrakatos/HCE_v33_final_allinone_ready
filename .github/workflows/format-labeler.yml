@@ -1,8 +1,7 @@
-name: Formatting Label Bot
+name: Formatting Label Bot (disabled)
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -10,6 +9,7 @@ permissions:
 
 jobs:
   label_formatting:
+    if: ${{ false }} # disabled; replaced by PR Lite
     name: Label PR if formatting needed
     runs-on: ubuntu-latest
     steps:

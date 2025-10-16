@@ -1,8 +1,7 @@
-name: PR Lint Suggestions
+name: PR Lint Suggestions (disabled)
 
 on:
-  pull_request:
-    branches: ["**"]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -10,6 +9,7 @@ permissions:
 
 jobs:
   ruff_review:
+    if: ${{ false }} # disabled; replaced by PR Lite
     name: Ruff Suggestion Bot
     runs-on: ubuntu-latest
     steps:
@@ -41,6 +41,7 @@ jobs:
           ruff check .
 
   black_review:
+    if: ${{ false }} # disabled; replaced by PR Lite
     name: Black Suggestion Bot
     runs-on: ubuntu-latest
     steps:

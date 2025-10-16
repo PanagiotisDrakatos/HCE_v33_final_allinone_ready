@@ -1,8 +1,7 @@
-name: Auto Format Fix
+name: Auto Format Fix (disabled)
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -14,6 +13,7 @@ concurrency:
 
 jobs:
   autofix:
+    if: ${{ false }} # disabled; replaced by PR Lite and Push Full
     name: Auto-fix lint/format and push to PR
     runs-on: ubuntu-latest
 

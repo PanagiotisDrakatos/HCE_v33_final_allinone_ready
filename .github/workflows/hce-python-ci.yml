@@ -1,7 +1,6 @@
-name: HCE Python CI (ruff only)
+name: HCE Python CI (ruff only) [disabled]
 
 on:
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -10,6 +9,7 @@ permissions:
 
 jobs:
   test:
+    if: ${{ false }} # disabled in favor of PR Lite
     name: ruff-lint
     runs-on: ubuntu-latest
 

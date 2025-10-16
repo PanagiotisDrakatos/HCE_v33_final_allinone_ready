@@ -1,10 +1,6 @@
 name: CI
 
 on:
-  push:
-    branches: ["**"]
-  pull_request:
-    branches: ["**"]
   workflow_dispatch:
     inputs:
       run_integration:
@@ -79,9 +75,7 @@ jobs:
     timeout-minutes: 35
     needs: [lint_and_unit]
     if: |
-      github.event_name == 'workflow_dispatch' && inputs.run_integration == true ||
-      (github.event_name == 'push' && contains(github.event.head_commit.message, '[it]')) ||
-      (github.event_name == 'pull_request' && contains(github.head_ref, 'it/'))
+      github.event_name == 'workflow_dispatch' && inputs.run_integration == true
 
     services:
       clickhouse:
@@ -118,37 +112,7 @@ jobs:
           pip install -r requirements.txt
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
 
-      - name: Start services via Docker Compose (act mode)
-        if: env.ACT == 'true'
-        run: |
-          docker compose -f docker-compose.yml up -d
-          sudo apt-get update && sudo apt-get install -y postgresql-client curl
-
-      - name: Wait for services (act mode)
-        if: env.ACT == 'true'
-        run: |
-          echo "Waiting for Postgres..."
-          for i in {1..60}; do
-            if pg_isready -h 127.0.0.1 -p 5432 -U postgres; then echo "Postgres ready"; break; fi; sleep 2; done
-          echo "Waiting for ClickHouse..."
-          for i in {1..60}; do
-            if curl -fsS http://127.0.0.1:8123/ping | grep -qi "ok"; then echo "ClickHouse ready"; break; fi; sleep 2; done
-
-      - name: Run Integration Tests (act mode)
-        if: env.ACT == 'true'
-        env:
-          IT_CLICKHOUSE: "1"
-          IT_TIMESCALE: "1"
-          CLICKHOUSE_URL: "http://localhost:8123"
-          TIMESCALE_DSN: "postgresql://postgres:postgres@localhost:5432/hce"
-        run: pytest -q -m "integration"
-
-      - name: Teardown services (act mode)
-        if: always() && env.ACT == 'true'
-        run: docker compose -f docker-compose.yml down -v
-
       - name: Run Integration Tests (GitHub services)
-        if: env.ACT != 'true'
         env:
           IT_CLICKHOUSE: "1"
           IT_TIMESCALE: "1"
