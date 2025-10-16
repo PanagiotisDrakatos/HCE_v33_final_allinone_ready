@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# post-commit: Attempt to push after each commit.
+# pre-push hook will block the push if checks fail.
+set -euo pipefail
+
+branch="$(git rev-parse --abbrev-ref HEAD)"
+echo "[post-commit] Attempting push for branch: $branch"
+git push origin "$branch" || {
+  code=$?
+  echo "[post-commit] Push failed (exit $code). This is expected if pre-push gates failed."
+  exit $code
+}

@@ -1,0 +1,17 @@
+# JetBrains Auto-Commit + Gated Auto-Push Hooks
+
+## Files
+- hooks/pre-push      → blocks `git push` unless `ruff`, `black --check`, and `pytest` pass
+- hooks/post-commit   → runs `git push` after each commit (pre-push will block if checks fail)
+- install_hooks.sh    → copies hooks into `.git/hooks` and sets executable bit
+
+## Install
+```bash
+unzip jetbrains_auto_commit_hooks.zip -d .
+cd jetbrains_auto_commit_hooks
+bash install_hooks.sh
+```
+
+## Options
+- Set `FAST=1` to run a faster pytest subset: `FAST=1 git push`
+- Add `[skip ci]` to last commit message to bypass gates.
