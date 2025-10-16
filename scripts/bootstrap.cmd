@@ -35,11 +35,8 @@ if not exist "%VENV_DIR%" (
   call "%VENV_DIR%\Scripts\activate"
 )
 
-rem Helpful dev tools for fast local runs
+rem Minimal tooling: Ruff only
 python -m pip install -q --upgrade pip wheel >nul 2>&1
-pip install -q pytest pytest-xdist ruff black >nul 2>&1
+pip install -q ruff >nul 2>&1
 
-set PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
-
-echo ✅ Bootstrapped fast env: %VENV_DIR%
-
+echo ✅ Bootstrapped env (ruff-ready): %VENV_DIR%
