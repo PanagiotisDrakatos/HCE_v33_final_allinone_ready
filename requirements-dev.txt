@@ -1,5 +1,5 @@
 # Development-only tools (pinned)
-black==24.10.0
+black==25.9.0
 ruff==0.14.0
 pip-audit==2.7.3
 pre-commit==4.0.1
