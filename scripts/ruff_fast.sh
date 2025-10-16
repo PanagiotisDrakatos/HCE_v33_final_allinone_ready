@@ -31,9 +31,9 @@ else
   . "$VENV_DIR/bin/activate"
 fi
 
-# 3) Find changed Python files versus origin/main (robust fallbacks)
+# 3) Find changed Python files versus origin/main (robust fallbacks) using NUL-delimited output
 BASE="$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main 2>/dev/null || echo HEAD~1)"
-CHANGED="$(git diff --name-only "$BASE"...HEAD -- '*.py' || true)"
+CHANGED_NUL="$(git -c core.quotepath=false diff --name-only -z "$BASE"...HEAD -- '*.py' || true)"
 
 # 4) Run ruff on changed files only (fallback: all). Default to auto-fix; set RUFF_CHECK=1 to disable fixes
 RUFF_ARGS=(check)
@@ -41,14 +41,13 @@ if [ "${RUFF_CHECK:-0}" -eq 0 ]; then
   RUFF_ARGS+=(--fix)
 fi
 
-if [ -n "$CHANGED" ]; then
+if [ -n "$CHANGED_NUL" ]; then
   echo "🔍 Ruff on changed files..."
-  # Use NUL-delimited to be safe with spaces (git uses \n, but tr handles it)
-  printf '%s\0' $CHANGED | tr '\n' '\0' | xargs -0 -r ruff "${RUFF_ARGS[@]}"
+  # Feed NUL-delimited file list to ruff via xargs -0
+  printf '%s' "$CHANGED_NUL" | xargs -0 -r ruff "${RUFF_ARGS[@]}"
 else
   echo "🔍 Ruff on all files..."
   ruff "${RUFF_ARGS[@]}" .
 fi
 
 echo "✅ Ruff completed"
-
