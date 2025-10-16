@@ -31,12 +31,8 @@ else
   . "$VENV_DIR/bin/activate"
 fi
 
-# Helpful dev tools for fast local runs
+# Minimal tooling: Ruff only
 python -m pip install -q --upgrade pip wheel >/dev/null 2>&1 || true
-pip install -q pytest pytest-xdist ruff black >/dev/null 2>&1 || true
+pip install -q ruff >/dev/null 2>&1 || true
 
-# Keep pytest clean and deterministic
-export PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
-
-echo "✅ Bootstrapped fast env: $VENV_DIR"
-
+echo "✅ Bootstrapped env (ruff-ready): $VENV_DIR"
