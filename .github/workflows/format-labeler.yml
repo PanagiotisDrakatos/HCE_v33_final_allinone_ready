@@ -1,0 +1,69 @@
+name: Formatting Label Bot
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  label_formatting:
+    name: Label PR if formatting needed
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure label exists
+        uses: peter-evans/create-or-update-labels@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          labels: >-
+            [
+              {"name":"needs-formatting","color":"EDEDED","description":"Formatting/linting changes required"}
+            ]
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ruff & black
+        run: |
+          pip install ruff black
+
+      - name: Run Ruff/Black checks
+        id: lint
+        shell: bash
+        run: |
+          set +e
+          ruff check .
+          ruff_status=$?
+          black --check .
+          black_status=$?
+          if [ $ruff_status -ne 0 ] || [ $black_status -ne 0 ]; then
+            echo "needs_formatting=true" >> $GITHUB_OUTPUT
+          else
+            echo "needs_formatting=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Add 'needs-formatting' label
+        if: steps.lint.outputs.needs_formatting == 'true' && env.ACT != 'true'
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          labels: needs-formatting
+
+      - name: Remove 'needs-formatting' label
+        if: steps.lint.outputs.needs_formatting == 'false' && env.ACT != 'true'
+        uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          labels: needs-formatting
+
+      - name: Log label decision (act mode)
+        if: env.ACT == 'true'
+        run: |
+          echo "[act] needs_formatting=${{ steps.lint.outputs.needs_formatting }} (no label changes under act)"
