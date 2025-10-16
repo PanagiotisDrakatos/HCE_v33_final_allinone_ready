@@ -24,7 +24,7 @@ env:
 
 jobs:
   lint_and_unit:
-    name: Lint & Unit (fast)
+    name: Lint & Unit
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -40,10 +40,10 @@ jobs:
 
       - name: Install project and dependencies
         run: |
-          python -m pip install -U pip
-          pip install -e .  # 🛠 install local package (resolves ModuleNotFoundError)
+          python -m pip install --upgrade pip
+          pip install -e .
           pip install -r requirements.txt -r requirements-dev.txt
-          pip install pytest-xdist ruff black
+          pip install pytest-xdist ruff black  # ✅ force install tools
 
       - name: Detect changed Python files
         id: diff
@@ -70,7 +70,7 @@ jobs:
             ruff check --select I,E,F,UP .
           fi
 
-      - name: Run Black (format check)
+      - name: Run Black (style check)
         run: |
           files="${{ steps.diff.outputs.files }}"
           if [[ -n "$files" ]]; then
@@ -79,20 +79,15 @@ jobs:
             black --check .
           fi
 
-      - name: Verify pytest plugins
-        run: pytest --version --trace-config
-
-      - name: Run Unit Tests with Coverage (auto-detect xdist)
+      - name: Run Unit Tests with Coverage (auto fallback)
         run: |
-          if pytest --version --trace-config 2>&1 | grep -Ei '(^|[ ,])xdist( |-|,|$)' >/dev/null; then
-            echo "xdist detected: running with -n auto"
-            PARALLEL="-n auto"
+          if python -c "import xdist" 2>/dev/null; then
+            echo "✅ Running with pytest-xdist"
+            pytest -q -m "not integration" -n auto --cov=hcebt --cov-report=xml
           else
-            echo "xdist not detected: running without -n"
-            PARALLEL=""
+            echo "⚠️ pytest-xdist not found, running single-threaded"
+            pytest -q -m "not integration" --cov=hcebt --cov-report=xml
           fi
-          pytest -q ${PARALLEL} -m "not integration" \
-            --cov=hcebt --cov-report=xml
 
       - name: Upload coverage to Codecov (main only)
         if: github.ref == 'refs/heads/main'
@@ -143,7 +138,7 @@ jobs:
 
       - name: Install project and dependencies
         run: |
-          python -m pip install -U pip
+          python -m pip install --upgrade pip
           pip install -e .
           pip install -r requirements.txt -r requirements-dev.txt
 
