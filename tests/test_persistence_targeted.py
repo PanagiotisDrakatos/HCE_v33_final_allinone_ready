@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from hcebt.persistence import Repo, RepoConfig
 
 
@@ -104,4 +102,3 @@ def test_repo_config_queue_max_batches_backcompat():
     cfg = RepoConfig(queue_max=10, queue_max_batches=5)
     assert cfg.queue_max == 5
     assert cfg.queue_max_batches_prop == 5
-

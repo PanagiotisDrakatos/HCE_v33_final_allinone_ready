@@ -1,9 +1,8 @@
-import math
 from dataclasses import dataclass
 
 import pytest
 
-from hcebt.fills import MarketSnapshot, OrderIntent, ShadowFillModel
+from hcebt.fills import OrderIntent, ShadowFillModel
 
 
 def make_snap():
@@ -46,7 +45,11 @@ def test_slip_modes_bid_ask_aware_true_and_false():
 
         # hybrid
         m = ShadowFillModel(
-            slip_mode="hybrid", bps=10, pct_spread=50.0, hybrid_weight=0.25, bid_ask_aware=bid_ask_aware
+            slip_mode="hybrid",
+            bps=10,
+            pct_spread=50.0,
+            hybrid_weight=0.25,
+            bid_ask_aware=bid_ask_aware,
         )
         pb, *_ = m.market_fill(snap, OrderIntent(side=+1, order_type="market", qty=1))
         ps, *_ = m.market_fill(snap, OrderIntent(side=-1, order_type="market", qty=1))
@@ -63,18 +66,24 @@ def test_limit_fill_resting_and_price_capped_by_limit():
     m = ShadowFillModel(slip_mode="fixed_ticks", ticks=0.2, bid_ask_aware=True)
 
     # Non-marketable buy (limit below ask)
-    p, q, s, st = m.limit_fill(snap, OrderIntent(side=+1, order_type="limit", qty=3, limit_price=100.5))
+    p, q, s, st = m.limit_fill(
+        snap, OrderIntent(side=+1, order_type="limit", qty=3, limit_price=100.5)
+    )
     assert (p, q, s, st) == (0.0, 0.0, 0.0, "resting")
 
     # Marketable buy (limit above/equal ask) — price must not exceed limit
-    p, q, s, st = m.limit_fill(snap, OrderIntent(side=+1, order_type="limit", qty=3, limit_price=101.1))
+    p, q, s, st = m.limit_fill(
+        snap, OrderIntent(side=+1, order_type="limit", qty=3, limit_price=101.1)
+    )
     assert st == "filled"
     assert q == 3
     assert p <= 101.1
     assert s == pytest.approx(abs(p - 101.0) * 3)
 
     # Marketable sell (limit below/equal bid) — price must not go below limit
-    p, q, s, st = m.limit_fill(snap, OrderIntent(side=-1, order_type="limit", qty=2, limit_price=98.9))
+    p, q, s, st = m.limit_fill(
+        snap, OrderIntent(side=-1, order_type="limit", qty=2, limit_price=98.9)
+    )
     assert st == "filled"
     assert q == 2
     assert p >= 98.9
@@ -91,12 +100,15 @@ def test_stop_and_stop_limit_paths():
 
     # Stop triggered (last >= stop) → uses market_fill
     snap_trig = {**snap, "last": 200.0}
-    p, q, s, st = m.stop_fill(snap_trig, OrderIntent(side=+1, order_type="stop", qty=1, stop_price=150))
+    p, q, s, st = m.stop_fill(
+        snap_trig, OrderIntent(side=+1, order_type="stop", qty=1, stop_price=150)
+    )
     assert st == "triggered" and q == 1 and p > 0 and s >= 0
 
     # Stop-limit triggered but limit not marketable → resting
     p, q, s, st = m.stop_limit_fill(
-        snap_trig, OrderIntent(side=+1, order_type="stop-limit", qty=1, stop_price=150, limit_price=100.0)
+        snap_trig,
+        OrderIntent(side=+1, order_type="stop-limit", qty=1, stop_price=150, limit_price=100.0),
     )
     assert st == "resting"
 
@@ -121,4 +133,3 @@ def test_fill_dispatch_and_snapshot_mapping():
     s2 = Snap()
     res = m.fill(s2, OrderIntent(side=-1, order_type="market", qty=4))
     assert res.status == "filled" and res.filled_qty == 4
-
