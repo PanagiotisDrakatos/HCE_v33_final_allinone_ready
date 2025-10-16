@@ -9,30 +9,30 @@ if ! command -v uv >/dev/null 2>&1; then
   export PATH="$HOME/.local/bin:$PATH"
 fi
 
-# Compute a stable hash from combined requirements to key the venv
-REQ_HASH="$(cat requirements.txt requirements-dev.txt 2>/dev/null | sha256sum | awk '{print $1}')"
-if [ -z "${REQ_HASH:-}" ]; then
-  REQ_HASH="$(date +%s)"
+# Determine Ruff version from requirements-dev.txt if available; fallback to a stable pin
+RUFF_VERSION="${RUFF_VERSION:-}"
+if [ -z "${RUFF_VERSION:-}" ] && [ -f requirements-dev.txt ]; then
+  # Extract version token after 'ruff' on its line
+  RUFF_VERSION="$(grep -iE '^\s*ruff(\s*[=~<>!]{1,2}\s*[^#[:space:]]+)?' requirements-dev.txt | head -n1 | sed -E 's/.*ruff[^0-9]*([0-9][^[:space:]]*).*/\1/' || true)"
 fi
-VENV_DIR=".venv-${REQ_HASH}"
+if [ -z "${RUFF_VERSION:-}" ] || ! echo "$RUFF_VERSION" | grep -Eq '^[0-9]'; then
+  RUFF_VERSION="0.6.9"
+fi
+VENV_DIR=".venv-ruff-${RUFF_VERSION}"
 
-# Create or reuse the venv and install deps via uv (cached)
+# Create or reuse the venv and install Ruff only via uv (cached)
 if [ ! -d "$VENV_DIR" ]; then
   echo "Creating venv: $VENV_DIR"
   uv venv "$VENV_DIR"
   . "$VENV_DIR/bin/activate"
-  # Try combined install first, then fall back to individual files if needed
-  if [ -f requirements.txt ] || [ -f requirements-dev.txt ]; then
-    uv pip install -r requirements.txt -r requirements-dev.txt || true
-    [ -f requirements.txt ] && uv pip install -r requirements.txt || true
-    [ -f requirements-dev.txt ] && uv pip install -r requirements-dev.txt || true
+  if ! uv pip install "ruff==${RUFF_VERSION}"; then
+    uv pip install ruff
   fi
 else
   . "$VENV_DIR/bin/activate"
 fi
 
-# Minimal tooling: Ruff only
+# Ensure pip tooling is present (quiet best-effort)
 python -m pip install -q --upgrade pip wheel >/dev/null 2>&1 || true
-pip install -q ruff >/dev/null 2>&1 || true
 
-echo "✅ Bootstrapped env (ruff-ready): $VENV_DIR"
+echo "✅ Bootstrapped env (ruff-only): $VENV_DIR"
