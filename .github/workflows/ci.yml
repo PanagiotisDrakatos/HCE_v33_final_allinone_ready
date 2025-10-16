@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ "**" ]
+    branches: ["**"]
   pull_request:
-    branches: [ "**" ]
+    branches: ["**"]
   workflow_dispatch:
     inputs:
       run_integration:
@@ -38,24 +38,22 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
 
-      - name: Install deps (cached)
+      - name: Install project and dependencies
         run: |
           python -m pip install -U pip
+          pip install -e .  # 🛠 install local package (resolves ModuleNotFoundError)
           pip install -r requirements.txt -r requirements-dev.txt
           pip install pytest-xdist
 
-      - name: Determine changed Python files
+      - name: Detect changed Python files
         id: diff
-        shell: bash
         run: |
-          set -euo pipefail
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             base="${{ github.event.pull_request.base.sha }}"
             head="${{ github.event.pull_request.head.sha }}"
           else
-            # fallback: compare to merge-base with origin/main if available
             git fetch --no-tags --depth=1 origin main || true
-            base="$(git merge-base HEAD origin/main || echo HEAD^)"
+            base=$(git merge-base HEAD origin/main || echo HEAD^)
             head="${GITHUB_SHA}"
           fi
           files=$(git diff --name-only "$base" "$head" | grep -E '\.py$' || true)
@@ -63,25 +61,27 @@ jobs:
           echo "$files" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Ruff (changed files only)
-        if: ${{ steps.diff.outputs.files != '' }}
+      - name: Run Ruff (lint)
         run: |
-          echo "${{ steps.diff.outputs.files }}" | tr '\n' ' ' | xargs -r ruff check --select I,E,F,UP
-      - name: Ruff (fallback whole repo)
-        if: ${{ steps.diff.outputs.files == '' }}
-        run: ruff check --select I,E,F,UP .
+          files="${{ steps.diff.outputs.files }}"
+          if [[ -n "$files" ]]; then
+            echo "$files" | tr '\n' ' ' | xargs -r ruff check --select I,E,F,UP
+          else
+            ruff check --select I,E,F,UP .
+          fi
 
-      - name: Black check (changed files only)
-        if: ${{ steps.diff.outputs.files != '' }}
+      - name: Run Black (format check)
         run: |
-          echo "${{ steps.diff.outputs.files }}" | tr '\n' ' ' | xargs -r black --check
-      - name: Black check (fallback whole repo)
-        if: ${{ steps.diff.outputs.files == '' }}
-        run: black --check .
+          files="${{ steps.diff.outputs.files }}"
+          if [[ -n "$files" ]]; then
+            echo "$files" | tr '\n' ' ' | xargs -r black --check
+          else
+            black --check .
+          fi
 
-      - name: Run unit tests (parallel) with coverage
+      - name: Run Unit Tests with Coverage
         run: |
-          pytest -q -m "not integration" -n auto \
+          pytest -q -n auto -m "not integration" \
             --cov=hcebt --cov=lib --cov-report=xml
 
       - name: Upload coverage to Codecov (main only)
@@ -94,14 +94,14 @@ jobs:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   integration:
-    name: Integration (on demand)
+    name: Integration Tests (on demand)
     runs-on: ubuntu-latest
     timeout-minutes: 35
     needs: [lint_and_unit]
     if: |
-      github.event_name == 'workflow_dispatch' && inputs.run_integration == true
-      || (github.event_name == 'push' && contains(github.event.head_commit.message, '[it]'))
-      || (github.event_name == 'pull_request' && contains(github.head_ref, 'it/'))
+      github.event_name == 'workflow_dispatch' && inputs.run_integration == true ||
+      (github.event_name == 'push' && contains(github.event.head_commit.message, '[it]')) ||
+      (github.event_name == 'pull_request' && contains(github.head_ref, 'it/'))
 
     services:
       clickhouse:
@@ -110,6 +110,7 @@ jobs:
         options: >-
           --health-cmd="wget -qO- http://localhost:8123/ping || exit 1"
           --health-interval=5s --health-timeout=2s --health-retries=30
+
       timescale:
         image: timescale/timescaledb:2.16.1-pg15
         env:
@@ -130,12 +131,13 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
 
-      - name: Install deps (cached)
+      - name: Install project and dependencies
         run: |
           python -m pip install -U pip
+          pip install -e .
           pip install -r requirements.txt -r requirements-dev.txt
 
-      - name: Run integration tests
+      - name: Run Integration Tests
         env:
           IT_CLICKHOUSE: "1"
           IT_TIMESCALE: "1"
