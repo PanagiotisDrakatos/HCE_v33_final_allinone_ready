@@ -17,7 +17,7 @@ call "%VENV_DIR%\Scripts\activate"
 
 rem Only Ruff linting
 echo 🔍 Linting (ruff)...
-ruff check --select I,E,F,UP .
+ruff check .
 set "RC=%ERRORLEVEL%"
 if not "%RC%"=="0" (
   echo Ruff reported issues (exit %RC%).
