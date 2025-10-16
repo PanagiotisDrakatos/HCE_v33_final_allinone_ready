@@ -7,7 +7,7 @@ name = "hcebt"
 version = "0.0.0"
 requires-python = ">=3.11"
 description = "HCE backtest engine"
-readme = "README.md"
+readme = "README.txt"
 
 [tool.setuptools]
 package-dir = {"" = "."}
