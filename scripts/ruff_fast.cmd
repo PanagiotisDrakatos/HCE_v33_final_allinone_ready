@@ -54,4 +54,3 @@ if defined CHANGED (
 )
 
 echo ✅ Ruff completed
-
