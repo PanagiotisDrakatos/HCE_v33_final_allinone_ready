@@ -1,17 +1,43 @@
-name: PR Labeler
-on:
-  pull_request_target:
-    types: [opened, synchronize]
+# Label PRs based on changed files, title, body, or branch name
+feature:
+  - changed-files:
+      any-glob-to-any-file:
+        - "src/**"
+        - "packages/**"
+  - head-branch:
+      - "^feat/.*"
+      - "^feature/.*"
+  - title:
+      - "/^(feat|feature)(\\(|:)/i"
 
-permissions:
-  contents: read
-  pull-requests: write
+bug:
+  - changed-files:
+      any-glob-to-any-file:
+        - "fixes/**"
+        - "**/*bug*.py"
+  - head-branch:
+      - "^fix/.*"
+      - "^bugfix/.*"
+  - title:
+      - "/^fix(\\(|:)/i"
+  - body:
+      - "/(repro|steps to reproduce|expected|actual)/i"
 
-jobs:
-  label:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/labeler@v5
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+docs:
+  - changed-files:
+      any-glob-to-any-file:
+        - "**/*.md"
+        - "docs/**"
 
+tests:
+  - changed-files:
+      any-glob-to-any-file:
+        - "tests/**"
+        - "**/test_*.py"
+
+ci:
+  - changed-files:
+      any-glob-to-any-file:
+        - ".github/workflows/**"
+        - "Makefile"
+        - "scripts/**"
