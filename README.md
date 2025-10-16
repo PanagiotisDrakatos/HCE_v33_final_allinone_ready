@@ -1,5 +1,8 @@
 # HCE Backtest & A/B — v3.3 (All‑in‑One)
 
+[![CI](https://github.com/PanagiotisDrakatos/HCE_v33_final_allinone_ready/actions/workflows/ci.yml/badge.svg)](https://github.com/PanagiotisDrakatos/HCE_v33_final_allinone_ready/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/PanagiotisDrakatos/HCE_v33_final_allinone_ready/branch/main/graph/badge.svg)](https://codecov.io/gh/PanagiotisDrakatos/HCE_v33_final_allinone_ready)
+
 **Ημερομηνία:** 2025-10-15
 
 Περιλαμβάνει *όλα* σε ένα πακέτο:
