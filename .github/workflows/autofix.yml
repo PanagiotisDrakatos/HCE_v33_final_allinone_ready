@@ -33,7 +33,7 @@ jobs:
           black . || true
 
       - name: Create PR
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v7
         with:
           commit-message: "chore(autofix): apply ruff/black/isort fixes [skip ci]"
           title: "chore(autofix): code style fixes"
