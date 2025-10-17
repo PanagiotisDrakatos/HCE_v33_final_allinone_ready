@@ -1,11 +1,40 @@
 feature:
-  - '**/*.py'
-  - 'src/**'
+  - changed-files:
+      any-glob-to-any-file:
+        - "**/*.py"
+        - "src/**"
+        - "packages/**"
+
 bug:
-  - '**/*fix*'
+  - changed-files:
+      any-glob-to-any-file:
+        - "**/*fix*"
+        - "hotfix/**"
+
 docs:
-  - '**/*.md'
+  - changed-files:
+      any-glob-to-any-file:
+        - "docs/**"
+        - "**/*.md"
+
 chore:
-  - '.github/**'
+  - changed-files:
+      any-glob-to-any-file:
+        - ".github/**"
+
 tests:
-  - 'tests/**'
+  - changed-files:
+      any-glob-to-any-file:
+        - "tests/**"
+        - "**/test_*.py"
+        - "**/*_test.py"
+        - "**/*.spec.ts"
+        - "**/*.test.ts"
+        - "**/*.spec.tsx"
+        - "**/*.test.tsx"
+
+ci:
+  - changed-files:
+      any-glob-to-any-file:
+        - ".github/workflows/**"
+        - ".github/labeler.yml"
