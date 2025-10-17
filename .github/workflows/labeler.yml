@@ -1,0 +1,76 @@
+# .github/labeler.yml
+
+feature:
+  - changed-files:
+      any-glob-to-any-file:
+        - "src/**"
+        - "packages/**"
+
+bug:
+  - changed-files:
+      any-glob-to-any-file:
+        - "**/*fix*"
+        - "hotfix/**"
+
+docs:
+  - changed-files:
+      any-glob-to-any-file:
+        - "docs/**"
+        - "**/*.md"
+
+tests:
+  - changed-files:
+      any-glob-to-any-file:
+        - "tests/**"
+        - "**/test_*.py"
+        - "**/*_test.py"
+        - "**/*.spec.ts"
+        - "**/*.test.ts"
+        - "**/*.spec.tsx"
+        - "**/*.test.tsx"
+
+ci:
+  - changed-files:
+      any-glob-to-any-file:
+        - ".github/workflows/**"
+        - ".github/labeler.yml"
+
+python:
+  - changed-files:
+      any-glob-to-any-file:
+        - "**/*.py"
+
+typescript:
+  - changed-files:
+      any-glob-to-any-file:
+        - "**/*.ts"
+        - "**/*.tsx"
+
+config:
+  - changed-files:
+      any-glob-to-any-file:
+        - "**/*.yaml"
+        - "**/*.yml"
+        - "**/*.toml"
+        - "**/*.ini"
+        - "**/*.json"
+
+docker:
+  - changed-files:
+      any-glob-to-any-file:
+        - "docker/**"
+        - "**/Dockerfile"
+        - "**/docker-compose*.yml"
+
+infra:
+  - changed-files:
+      any-glob-to-any-file:
+        - "infra/**"
+        - "deploy/**"
+
+chore:
+  - changed-files:
+      any-glob-to-any-file:
+        - ".editorconfig"
+        - ".gitignore"
+        - "scripts/**"
