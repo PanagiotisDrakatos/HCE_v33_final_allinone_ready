@@ -1,17 +1,14 @@
-name: PR Labeler
-on:
-  pull_request_target:
-    types: [opened, synchronize]
+feature:
+  - 'src/features/**'
 
-permissions:
-  contents: read
-  pull-requests: write
+docs:
+  - 'docs/**'
+  - '**/*.md'
 
-jobs:
-  label:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/labeler@v5
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+ci:
+  - '.github/workflows/**'
 
+tests:
+  - 'tests/**'
+  - '**/*_test.*'
+  - '**/*.spec.*'
