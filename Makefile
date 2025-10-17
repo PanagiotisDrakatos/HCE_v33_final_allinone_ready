@@ -2,25 +2,34 @@ VENVDIR ?= .venv
 PY      := $(VENVDIR)/bin/python
 PIP     := $(VENVDIR)/bin/pip
 
-.PHONY: venv install dev check lint fmt test
+.PHONY: venv install dev check lint fmt autofix test
+
 venv:
 	@test -d $(VENVDIR) || python3 -m venv $(VENVDIR)
 
 install: venv
 	$(PIP) install -r requirements.txt
+	$(PIP) install -e .
 
-dev: venv
-	$(PIP) install pylint==2.17.4 ruff black
+dev: install
+	$(PIP) install -r requirements-dev.txt
 
+# Run lint then tests
 check: lint test
 
-lint:
+# Lint with ruff only (flake8/isort replaced)
+lint: dev
 	$(VENVDIR)/bin/ruff check .
-	$(VENVDIR)/bin/pylint hcebt || true
 
-fmt:
-	$(VENVDIR)/bin/black .
+# Format using ruff format (black replaced)
+fmt: dev
+	$(VENVDIR)/bin/ruff format .
 
-test:
-	$(VENVDIR)/bin/pytest -q
+# Auto-fix: ruff check --fix then ruff format
+autofix: dev
+	$(VENVDIR)/bin/ruff check . --fix
+	$(VENVDIR)/bin/ruff format .
 
+# Run test suite (exclude integration tests directory to avoid imports)
+test: dev
+	$(VENVDIR)/bin/pytest -q --ignore=tests/integration
