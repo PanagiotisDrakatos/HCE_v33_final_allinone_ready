@@ -39,7 +39,7 @@ if command -v ruff >/dev/null 2>&1; then
   echo "[pre-push] ruff check ."
   ruff check .
 else
-  echo "[pre-push] ruff not found — failing push."
+  echo "[pre-push] ruff not found — failing push. See the project README for setup instructions."
   exit 1
 fi
 
