@@ -57,7 +57,7 @@ jobs:
           sudo update-ca-certificates || true
 
       - name: Cache Ruff
-        if: ${{ !env.ACT }}
+        if: ${{ env.ACT != 'true' }}
         uses: actions/cache@v4
         with:
           path: .ruff_cache
@@ -91,7 +91,7 @@ jobs:
           (ruff format --check . 2>&1 | tee ci_logs/ruff-format-check.txt)
 
       - name: Upload lint logs
-        if: always() && !env.ACT
+        if: ${{ always() && env.ACT != 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: ci-logs-lint
@@ -151,7 +151,7 @@ jobs:
           (.venv/bin/pytest -q --cov=. --cov-report=xml --cov-report=term 2>&1 | tee ci_logs/pytest.txt)
 
       - name: Upload test outputs
-        if: always() && !env.ACT
+        if: ${{ always() && env.ACT != 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: ci-logs-tests
@@ -232,11 +232,11 @@ jobs:
         run: |
           set -euxo pipefail
           mkdir -p ci_logs
-          if git ls-files -z | grep -E -z '\.(cmd|bat|ps1)$'; then
+          if git ls-files -z | grep -E -z '\\.(cmd|bat|ps1)$'; then
             echo "::error::Windows-only scripts (*.cmd|*.bat|*.ps1) are not allowed." | tee ci_logs/pr-guard.policy.txt
             exit 1
           fi
-          if git grep -nE '\b(black|flake8|pylint|isort)\b' -- . ':!*.md' ':!CHANGELOG*' ':!.github/workflows/codeql.yml' ; then
+          if git grep -nE '\\b(black|flake8|pylint|isort)\\b' -- . ':(exclude)*.md' ':(exclude)README*' ':(exclude)CHANGELOG*' ':(exclude)pyproject.toml' ':(exclude).github/workflows/codeql.yml' ':(exclude)scripts/**' ; then
             echo "::error::Found disallowed linters/configs (black/flake8/pylint/isort). Use Ruff only." | tee -a ci_logs/pr-guard.policy.txt
             exit 1
           fi
@@ -253,7 +253,7 @@ jobs:
           echo "✅ PR title OK." | tee ci_logs/pr-guard.title.txt
 
       - name: Upload PR-Guard logs
-        if: always() && !env.ACT
+        if: ${{ always() && env.ACT != 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: ci-logs-pr-guard
@@ -322,7 +322,7 @@ jobs:
           # Example placeholder: .venv/bin/python -m backtest_runner -q --output-dir ci_logs/backtests
 
       - name: Upload backtest outputs
-        if: always() && !env.ACT
+        if: ${{ always() && env.ACT != 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: ci-logs-backtests
