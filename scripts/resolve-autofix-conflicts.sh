@@ -56,7 +56,7 @@ TEST_FILES=()
 for f in "${CONFLICTS[@]}"; do
   if [[ "$f" =~ \.py$ ]]; then
     if [[ "$f" =~ ^tests/ ]]; then TEST_FILES+=("$f"); else PY_FILES+=("$f"); fi
-  elif [[ "$f" =~ (pyproject\.toml|ruff\.toml|\.pre-commit-config\.yaml|\.flake8|setup\.cfg|tox\.ini)$ ]]; then
+  elif [[ "$f" =~ (pyproject\.toml|ruff\.toml|\.pre-commit-config\.yaml|\|setup\.cfg|tox\.ini)$ ]]; then
     CFG_FILES+=("$f")
   else
     BUSINESS_FILES+=("$f")
