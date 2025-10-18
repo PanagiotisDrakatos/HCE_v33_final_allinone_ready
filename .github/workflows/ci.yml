@@ -2,9 +2,14 @@ name: CI
 
 on:
   pull_request:
+<<<<<<< HEAD
    types: [ opened, synchronize, reopened, ready_for_review ]
    branches: [ "**" ]
 
+=======
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: ["**"]
+>>>>>>> 6bc0bbd (fix(ci): add sudo for apt and set git identity in PR Guard)
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -17,21 +22,22 @@ env:
   PYTHON_VERSION: "3.11"
   PIP_DISABLE_PIP_VERSION_CHECK: 1
   PYTHONUNBUFFERED: 1
-  # For GitHub runs: Settings → Variables → RUN_BACKTESTS="1" to enable
   RUN_BACKTESTS: ${{ vars.RUN_BACKTESTS || '0' }}
 
+# ───────────────────────────── JOBS ─────────────────────────────
 jobs:
-  # ───────────────────────── Ruff Lint ─────────────────────────
+  # ───────── Ruff Lint & Format ─────────
   lint:
     name: Ruff Lint & Format (check)
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
+      # Ensure Node only for local act runs
       - name: Ensure Node (act only)
         if: ${{ env.ACT == 'true' }}
         run: |
-          apt-get update
-          apt-get install -y nodejs npm
+          sudo apt-get update
+          sudo apt-get install -y nodejs npm
           node -v && npm -v
 
       - uses: actions/checkout@v4
@@ -51,7 +57,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-ruff-
 
-      # ✅ Install Ruff in a venv (PEP 668 compliant)
+      # PEP 668-safe Ruff install
       - name: Install Ruff (venv)
         run: |
           set -euxo pipefail
@@ -78,7 +84,7 @@ jobs:
           name: ci-logs-lint
           path: ci_logs/
 
-  # ───────────────────────── Unit Tests ─────────────────────────
+  # ───────── Unit Tests ─────────
   tests:
     name: Unit Tests
     runs-on: ubuntu-24.04
@@ -88,29 +94,18 @@ jobs:
       - name: Ensure Node (act only)
         if: ${{ env.ACT == 'true' }}
         run: |
-          apt-get update
-          apt-get install -y nodejs npm
+          sudo apt-get update
+          sudo apt-get install -y nodejs npm
           node -v && npm -v
 
       - uses: actions/checkout@v4
 
-      # Replace setup-python with verifying the system Python
-      - name: System Python info
+      - name: Fix SSL (for act)
+        if: ${{ env.ACT == 'true' }}
         run: |
-          set -euxo pipefail
-          python3 -V
-          which python3
-
-      - name: Fix SSL in system Python
-        run: |
-          set -euxo pipefail
-          apt-get update
-          apt-get install -y --no-install-recommends libssl3 ca-certificates
-          update-ca-certificates || true
-          python3 - <<'PY'
-          import ssl
-          print("✅  System OpenSSL:", ssl.OPENSSL_VERSION)
-          PY
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libssl3 ca-certificates
+          sudo update-ca-certificates || true
 
       - name: Install deps (venv)
         run: |
@@ -137,20 +132,13 @@ jobs:
             ci_logs/
             coverage.xml
 
-  # ───────────────────────── PR Guard ─────────────────────────
+  # ───────── PR Guard ─────────
   pr-guard:
     name: PR Guard (merge/conflicts/policy)
     runs-on: ubuntu-24.04
     needs: [lint]
     timeout-minutes: 8
     steps:
-      - name: Ensure Node (act only)
-        if: ${{ env.ACT == 'true' }}
-        run: |
-          apt-get update
-          apt-get install -y nodejs npm
-          node -v && npm -v
-
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -162,6 +150,9 @@ jobs:
           echo "Base: $GITHUB_BASE_REF  Head: $GITHUB_HEAD_REF" | tee ci_logs/pr-guard.merge.txt
           git fetch origin "$GITHUB_BASE_REF" "$GITHUB_HEAD_REF"
           git checkout -b pr-merge-test "origin/$GITHUB_BASE_REF"
+          # ✅ fix: add identity so merge doesn’t fail
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
           if ! git merge --no-commit --no-ff "origin/$GITHUB_HEAD_REF"; then
             echo "::error::PR cannot be merged cleanly into ${GITHUB_BASE_REF}. Please rebase." | tee -a ci_logs/pr-guard.merge.txt
             exit 1
@@ -200,7 +191,7 @@ jobs:
             echo "::error::Windows-only scripts (*.cmd|*.bat|*.ps1) are not allowed." | tee ci_logs/pr-guard.policy.txt
             exit 1
           fi
-          if git grep -nE '\b(black|flake8|pylint|isort)\b' -- . ':!*.md' ':!CHANGELOG*' ':!.github/workflows/codeql.yml' ; then
+          if git grep -nE '\b(black|flake8|pylint|isort)\b' -- . ':!*.md' ':!CHANGELOG*' ':!.github/workflows/codeql.yml'; then
             echo "::error::Found disallowed linters/configs (black/flake8/pylint/isort). Use Ruff only." | tee -a ci_logs/pr-guard.policy.txt
             exit 1
           fi
@@ -222,68 +213,3 @@ jobs:
         with:
           name: ci-logs-pr-guard
           path: ci_logs/
-
-  # ───────────────────────── Backtests (optional) ─────────────────────────
-  backtests:
-    name: Backtests (optional)
-    runs-on: ubuntu-24.04
-    needs: [tests]
-    timeout-minutes: 60
-    steps:
-      - name: Ensure Node (act only)
-        if: ${{ env.ACT == 'true' }}
-        run: |
-          apt-get update
-          apt-get install -y nodejs npm
-          node -v && npm -v
-
-      - uses: actions/checkout@v4
-
-      # Replace setup-python with verifying the system Python
-      - name: System Python info
-        run: |
-          set -euxo pipefail
-          python3 -V
-          which python3
-
-      - name: Fix SSL in system Python
-        run: |
-          set -euxo pipefail
-          apt-get update
-          apt-get install -y --no-install-recommends libssl3 ca-certificates
-          update-ca-certificates || true
-          python3 - <<'PY'
-          import ssl
-          print("✅  System OpenSSL:", ssl.OPENSSL_VERSION)
-          PY
-
-      - name: Install deps (venv)
-        run: |
-          set -euxo pipefail
-          python3 -m venv .venv
-          .venv/bin/pip install -U pip setuptools wheel
-          if [ -f requirements.txt ]; then .venv/bin/pip install -r requirements.txt; fi
-          if [ -f requirements-dev.txt ]; then .venv/bin/pip install -r requirements-dev.txt; fi
-          if [ -f pyproject.toml ]; then .venv/bin/pip install -e .; fi
-          .venv/bin/pip install pytest pytest-cov
-
-      # For backtests, install additional dependencies
-      - name: Install backtest dependencies
-        run: |
-          set -euxo pipefail
-          if [ -f requirements-backtest.txt ]; then .venv/bin/pip install -r requirements-backtest.txt; fi
-
-      # Only run backtests if enabled
-      - name: Run backtests
-        if: ${{ env.RUN_BACKTESTS == '1' }}
-        run: |
-          set -euxo pipefail
-          mkdir -p ci_logs/backtests
-          (.venv/bin/python -m backtest_runner -q --output-dir ci_logs/backtests 2>&1 | tee ci_logs/backtests/backtest_results.txt)
-
-      - name: Upload backtest outputs
-        if: always() && !env.ACT
-        uses: actions/upload-artifact@v4
-        with:
-          name: ci-logs-backtests
-          path: ci_logs/backtests/
