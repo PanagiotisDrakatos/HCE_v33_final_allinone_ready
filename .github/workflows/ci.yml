@@ -2,14 +2,8 @@ name: CI
 
 on:
   pull_request:
-<<<<<<< HEAD
-   types: [ opened, synchronize, reopened, ready_for_review ]
-   branches: [ "**" ]
-
-=======
     types: [opened, synchronize, reopened, ready_for_review]
     branches: ["**"]
->>>>>>> 6bc0bbd (fix(ci): add sudo for apt and set git identity in PR Guard)
 
 concurrency:
   group: ci-${{ github.ref }}
