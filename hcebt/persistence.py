@@ -1,8 +1,8 @@
-from dataclasses import dataclass
 import logging
 import queue
 import threading
 import time
+from dataclasses import dataclass
 
 
 @dataclass

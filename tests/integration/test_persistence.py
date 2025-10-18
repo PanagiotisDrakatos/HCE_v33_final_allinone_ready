@@ -3,7 +3,6 @@ import time
 import uuid
 
 import pytest
-
 from hcebt.persistence import Repo, RepoConfig
 
 

@@ -1,7 +1,6 @@
 from datetime import UTC, datetime
 
 import pytest
-
 from lib.timeutil import to_utc_iso
 
 
