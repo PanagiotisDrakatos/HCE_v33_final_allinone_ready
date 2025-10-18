@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Resolve ruff/black autofix merge conflicts during cherry-pick.
+# Resolve ruff autofix merge conflicts during cherry-pick.
 # Default: keep --theirs for *.py and config files, then continue.
 # Usage:
 #   scripts/resolve-autofix-conflicts.sh
@@ -107,9 +107,7 @@ git cherry-pick --continue || {
   log "❌ cherry-pick failed to continue. Fix remaining issues and retry."; exit 1;
 }
 
-# Optional: quick formatting pass
+# Optional: quick formatting pass (ruff only)
 if command -v ruff >/dev/null 2>&1; then ruff check . --fix || true; fi
-if command -v black >/dev/null 2>&1; then black . || true; fi
 
 log "🎉 Done."
-

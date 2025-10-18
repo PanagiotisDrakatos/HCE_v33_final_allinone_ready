@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # pre-push: Block pushes unless quality gates pass.
-# Runs ruff, black --check, and pytest. Exits non‑zero on failure.
+# Runs ruff and pytest. Exits non‑zero on failure.
 # Set FAST=1 to run a lighter test selection.
 set -euo pipefail
 
@@ -34,21 +34,16 @@ need_cmd() {
 }
 need_cmd git
 
-# These are optional but recommended
+# Ruff checks
 if command -v ruff >/dev/null 2>&1; then
   echo "[pre-push] ruff check ."
   ruff check .
 else
-  echo "[pre-push] ruff not found — skipping."
+  echo "[pre-push] ruff not found — failing push."
+  exit 1
 fi
 
-if command -v black >/dev/null 2>&1; then
-  echo "[pre-push] black --check ."
-  black --check .
-else
-  echo "[pre-push] black not found — skipping."
-fi
-
+# Tests
 if command -v pytest >/dev/null 2>&1; then
   if [[ "${FAST:-0}" == "1" ]]; then
     echo "[pre-push] pytest -q -m 'not slow and not e2e'"

@@ -4,9 +4,9 @@ echo "==> Unit tests with coverage gate"
 pytest -q
 echo "==> Integration tests (if DBs enabled)"
 pytest -q -m integration || true
-echo "==> Lint & format"
+echo "==> Lint & format (Ruff-only)"
 ruff check .
-black --check .
+ruff format --check .
 echo "==> Security audit (pip-audit) [non-blocking]"
 pip-audit -r requirements.txt || true
 echo "==> Secret scan (TruffleHog) [non-blocking]"

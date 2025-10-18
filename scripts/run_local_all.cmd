@@ -5,13 +5,9 @@ echo == Python env ==
 python -V
 pip --version
 
-REM Lint and format checks
+REM Lint checks (Ruff-only)
 echo == Ruff check ==
 ruff check .
-if errorlevel 1 goto :end
-
-echo == Black check ==
-black --check .
 if errorlevel 1 goto :end
 
 REM Unit tests (pytest.ini excludes integration by default)
@@ -26,4 +22,3 @@ REM Do not fail the script if integration tests fail locally
 
 :end
 endlocal
-

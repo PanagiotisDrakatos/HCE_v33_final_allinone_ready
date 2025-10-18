@@ -40,13 +40,10 @@ jobs:
           pip install -e .
           pip install -r requirements.txt
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
-          pip install pytest-xdist ruff black
+          pip install pytest-xdist ruff
 
       - name: Ruff Lint
         run: ruff check .
-
-      - name: Black Format Check
-        run: black --check .
 
       - name: Run Unit Tests with Coverage (fallback-safe)
         run: |
@@ -122,7 +119,7 @@ jobs:
           pytest -q -m "integration"
 
   ci_logs:
-    name: Collect CI logs (ruff/black/pytest)
+    name: Collect CI logs (ruff/pytest)
     runs-on: ubuntu-latest
     needs: [lint_and_unit]
     if: ${{ always() }}
@@ -136,12 +133,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt || true
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt || true; fi
-          pip install ruff black pytest || true
+          pip install ruff pytest || true
       - name: Run and capture outputs
         run: |
           mkdir -p ci_logs
           echo "==== ruff ====\n"    > ci_logs/ruff.txt;  (ruff check . || true)    2>&1 | tee -a ci_logs/ruff.txt
-          echo "==== black ====\n"  > ci_logs/black.txt; (black --check . || true) 2>&1 | tee -a ci_logs/black.txt
           echo "==== pytest ====\n" > ci_logs/pytest.txt; (pytest -q || true)      2>&1 | tee -a ci_logs/pytest.txt
       - uses: actions/upload-artifact@v4
         with:
@@ -170,12 +166,10 @@ jobs:
               try { return fs.readFileSync(p, 'utf8').slice(-4000); } catch { return '[missing]'; }
             }
             const ruff = tailFile(path.join('ci_logs','ruff.txt'));
-            const black = tailFile(path.join('ci_logs','black.txt'));
             const pytest = tailFile(path.join('ci_logs','pytest.txt'));
             const body = [
               '### ❌ CI failed — key excerpts',
               '```txt\n[ruff]\n' + ruff + '\n```',
-              '```txt\n[black]\n' + black + '\n```',
               '```txt\n[pytest]\n' + pytest + '\n```',
               '> Tip: run `gh run view --log` locally or use the ci:grab script.'
             ].join('\n\n');

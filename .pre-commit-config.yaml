@@ -5,7 +5,3 @@ repos:
       - id: ruff
         args: [--select, I,E,F,UP]
       - id: ruff-format
-  - repo: https://github.com/psf/black
-    rev: 24.8.0
-    hooks:
-      - id: black
