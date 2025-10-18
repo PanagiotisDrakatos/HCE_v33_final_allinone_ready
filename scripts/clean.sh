@@ -122,7 +122,10 @@ jobs:
         run: |
           set -euo pipefail
           # Allow .cmd files in scripts/ directory for local usage, forbid elsewhere
-          if git ls-files -z | grep -E -z '\.(bat|ps1)$' || (git ls-files -z | grep -E -z '\.cmd$' | grep -vz '^scripts/'); then
+          if git ls-files -z | awk -v RS='\0' '{
+            if ($0 ~ /\.(bat|ps1)$/) { exit 1 }
+            if ($0 ~ /\.cmd$/ && $0 !~ /^scripts\//) { exit 1 }
+          }'; then :; else
             echo "::error::Windows-only scripts (*.cmd|*.bat|*.ps1) are not allowed outside scripts/ directory."; exit 1
           fi
           if git grep -nE '\b(black|flake8|pylint|isort)\b' -- . ':!*.md' ':!CHANGELOG*' ':!.github/workflows/codeql.yml' ; then
