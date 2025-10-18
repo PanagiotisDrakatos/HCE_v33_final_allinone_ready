@@ -121,8 +121,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if git ls-files -z | grep -E -z '\.(cmd|bat|ps1)$'; then
-            echo "::error::Windows-only scripts (*.cmd|*.bat|*.ps1) are not allowed."; exit 1
+          # Allow .cmd files in scripts/ directory for local usage, forbid elsewhere
+          if git ls-files -z | grep -E -z '\.(bat|ps1)$' || (git ls-files -z | grep -E -z '\.cmd$' | grep -vz '^scripts/'); then
+            echo "::error::Windows-only scripts (*.cmd|*.bat|*.ps1) are not allowed outside scripts/ directory."; exit 1
           fi
           if git grep -nE '\b(black|flake8|pylint|isort)\b' -- . ':!*.md' ':!CHANGELOG*' ':!.github/workflows/codeql.yml' ; then
             echo "::error::Found disallowed linters/configs (black/flake8/pylint/isort). Use Ruff only."; exit 1
