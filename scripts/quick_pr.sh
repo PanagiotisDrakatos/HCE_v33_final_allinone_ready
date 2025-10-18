@@ -111,8 +111,25 @@ Highlights:
 No functional code changes.
 EOF
   fi
-  if ! gh pr create -B "$BASE_BRANCH" -H "$BRANCH_NAME" -t "$PR_TITLE" -F "$body_file" "${LABEL_ARGS[@]}"; then
-    echo "[quick_pr] gh failed to create PR — attempting to update labels on existing PR."
+  if [[ ${#LABEL_ARGS[@]} -gt 0 ]]; then
+    if ! gh pr create -B "$BASE_BRANCH" -H "$BRANCH_NAME" -t "$PR_TITLE" -F "$body_file" "${LABEL_ARGS[@]}"; then
+      echo "[quick_pr] gh failed to create PR — attempting to update labels on existing PR."
+      if [[ ${#LABEL_ARGS[@]} -gt 0 ]]; then
+        # Try to detect PR number and add labels
+        PR_NUM=$(gh pr view --json number -q .number 2>/dev/null || echo "")
+        if [[ -n "$PR_NUM" ]]; then
+          echo "[quick_pr] Adding labels to PR #$PR_NUM: $LABELS"
+          for ((i=0; i<${#LABEL_ARGS[@]}; i+=2)); do
+            gh pr edit "$PR_NUM" --add-label "${LABEL_ARGS[i+1]}" || true
+          done
+        fi
+      fi
+    fi
+  else
+    if ! gh pr create -B "$BASE_BRANCH" -H "$BRANCH_NAME" -t "$PR_TITLE" -F "$body_file"; then
+      echo "[quick_pr] gh failed to create PR."
+    fi
+  fi
     if [[ ${#LABEL_ARGS[@]} -gt 0 ]]; then
       # Try to detect PR number and add labels
       PR_NUM=$(gh pr view --json number -q .number 2>/dev/null || echo "")
