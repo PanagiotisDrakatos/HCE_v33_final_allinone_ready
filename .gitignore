@@ -7,6 +7,7 @@ __pycache__/
 *.dylib
 .venv/
 .venv-*/
+.venvl/
 venv/
 env/
 .pytest_cache/
