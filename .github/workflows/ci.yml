@@ -302,4 +302,28 @@ jobs:
           python3 -m venv .venv
           .venv/bin/pip install -U pip setuptools wheel
           if [ -f requirements.txt ]; then .venv/bin/pip install -r requirements.txt; fi
-          if [ -f requirements-dev.txt ]; then .venv/bin
+          if [ -f requirements-dev.txt ]; then .venv/bin/pip install -r requirements-dev.txt; fi
+          if [ -f pyproject.toml ]; then .venv/bin/pip install -e .; fi
+          .venv/bin/pip install pytest pytest-cov
+
+      # For backtests, install additional dependencies if present
+      - name: Install backtest dependencies
+        run: |
+          set -euxo pipefail
+          if [ -f requirements-backtest.txt ]; then .venv/bin/pip install -r requirements-backtest.txt; fi
+
+      # Only run backtests if enabled
+      - name: Run backtests
+        if: ${{ env.RUN_BACKTESTS == '1' }}
+        run: |
+          set -euxo pipefail
+          mkdir -p ci_logs/backtests
+          echo "Backtests would run here. Provide a runner or script if needed." | tee ci_logs/backtests/backtest_results.txt
+          # Example placeholder: .venv/bin/python -m backtest_runner -q --output-dir ci_logs/backtests
+
+      - name: Upload backtest outputs
+        if: always() && !env.ACT
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-logs-backtests
+          path: ci_logs/backtests/
