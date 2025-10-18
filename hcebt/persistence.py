@@ -1,8 +1,8 @@
+from dataclasses import dataclass
 import logging
 import queue
 import threading
 import time
-from dataclasses import dataclass
 
 
 @dataclass
@@ -107,11 +107,11 @@ class Repo:
         cols_sql = ",".join(cols)
         pk_cols = "run_id,ts,symbol,metric"
         sql = (
-                f"INSERT INTO {self.cfg.table} ({cols_sql}) VALUES {vals} "
-                f"ON CONFLICT ({pk_cols}) DO UPDATE SET "
-                + ",".join(
-            [f"{c}=EXCLUDED.{c}" for c in cols if c not in ("run_id", "ts", "symbol", "metric")]
-        )
+            f"INSERT INTO {self.cfg.table} ({cols_sql}) VALUES {vals} "
+            f"ON CONFLICT ({pk_cols}) DO UPDATE SET "
+            + ",".join(
+                [f"{c}=EXCLUDED.{c}" for c in cols if c not in ("run_id", "ts", "symbol", "metric")]
+            )
         )
         with self.repo[1].cursor() as cur:
             cur.execute(sql, args)
