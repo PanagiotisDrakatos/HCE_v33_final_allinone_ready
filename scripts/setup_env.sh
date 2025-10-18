@@ -1,14 +1,8 @@
 #!/usr/bin/env bash
-set -e
-
+set -euo pipefail
 python3 -m venv .venv
-if [ -f ".venv/Scripts/activate" ]; then
-  # Windows (Git Bash / Cygwin)
-  source .venv/Scripts/activate
-else
-  # Linux / macOS / WSL
-  source .venv/bin/activate
-fi
-
+source .venv/bin/activate
 python -m pip install -U pip wheel
-pip install -r requirements.txt -r requirements-dev.txt
+[ -f requirements.txt ] && pip install -r requirements.txt || true
+[ -f requirements-dev.txt ] && pip install -r requirements-dev.txt || true
+echo "✅ Virtualenv ready at .venv (Linux/WSL only)."

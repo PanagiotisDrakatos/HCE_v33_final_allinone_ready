@@ -1,60 +1,31 @@
 #!/usr/bin/env bash
-# pre-push: Block pushes unless quality gates pass.
-# Runs ruff, black --check, and pytest. Exits non‑zero on failure.
-# Set FAST=1 to run a lighter test selection.
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 
-# Optionally skip gates if last commit message contains [skip ci]
 last_msg="$(git log -1 --pretty=%B || true)"
 if [[ "$last_msg" == *"[skip ci]"* ]]; then
-  echo "[pre-push] Skipping gates due to [skip ci] in last commit message."
+  echo "[pre-push] Skipping due to [skip ci] in last commit."
   exit 0
 fi
 
-# Activate virtualenv if present (Windows Git Bash or Unix)
-if [[ -f ".venv/Scripts/activate" ]]; then
-  # Windows layout
-  source ".venv/Scripts/activate"
-elif [[ -f ".venv/bin/activate" ]]; then
-  # Unix/macOS layout
-  source ".venv/bin/activate"
-fi
+if [[ -f ".venv/bin/activate" ]]; then source ".venv/bin/activate"; fi
 
-echo "[pre-push] Running quality gates…"
-
-# Ensure required tools exist; if not, provide a helpful message.
-need_cmd() {
-  if ! command -v "$1" >/dev/null 2>&1; then
-    echo "[pre-push] Missing tool: $1. Install it in your venv or PATH." >&2
-    exit 1
-  fi
-}
-need_cmd git
-
-# These are optional but recommended
 if command -v ruff >/dev/null 2>&1; then
+  echo "[pre-push] ruff format --check ."
+  ruff format --check .
   echo "[pre-push] ruff check ."
   ruff check .
 else
-  echo "[pre-push] ruff not found — skipping."
-fi
-
-if command -v black >/dev/null 2>&1; then
-  echo "[pre-push] black --check ."
-  black --check .
-else
-  echo "[pre-push] black not found — skipping."
+  echo "[pre-push] ruff not found — failing push."
+  exit 1
 fi
 
 if command -v pytest >/dev/null 2>&1; then
   if [[ "${FAST:-0}" == "1" ]]; then
-    echo "[pre-push] pytest -q -m 'not slow and not e2e'"
     pytest -q -m "not slow and not e2e"
   else
-    echo "[pre-push] pytest -q"
     pytest -q
   fi
 else
@@ -62,5 +33,4 @@ else
   exit 1
 fi
 
-echo "[pre-push] All checks passed ✅ Proceeding with push."
-exit 0
+echo "[pre-push] All checks passed ✅"

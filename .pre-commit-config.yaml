@@ -3,9 +3,5 @@ repos:
     rev: v0.6.9
     hooks:
       - id: ruff
-        args: [--select, I,E,F,UP]
+        args: [--exit-non-zero-on-fix]
       - id: ruff-format
-  - repo: https://github.com/psf/black
-    rev: 24.8.0
-    hooks:
-      - id: black

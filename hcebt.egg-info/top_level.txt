@@ -1,2 +1,10 @@
+ci_logs
+examples
 hcebt
+hooks
 lib
+persistence
+run_artifacts
+scripts
+tests
+tmp
