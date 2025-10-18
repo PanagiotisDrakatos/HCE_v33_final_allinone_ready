@@ -14,7 +14,7 @@ dev: venv
 	# Ruff-only toolchain
 	$(PIP) install ruff pytest pytest-xdist
 
-check: lint test
+check: venv lint test
 	# Ruff-only checks (lint + format-check)
 	$(VENVDIR)/bin/ruff check --output-format=github .
 	$(VENVDIR)/bin/ruff format --check .
