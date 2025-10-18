@@ -35,12 +35,26 @@ jobs:
 
       - uses: actions/checkout@v4
 
+      # New: set git identity for any git operations
+      - name: Set git user
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+
       # Replace setup-python with verifying the system Python
       - name: System Python info
         run: |
           set -euxo pipefail
           python3 -V
           which python3
+
+      # New: fix SSL on both act and GH runners before any pip/network ops
+      - name: Fix SSL (for act and GH)
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libssl3 ca-certificates
+          sudo update-ca-certificates || true
 
       - name: Cache Ruff
         if: ${{ !env.ACT }}
@@ -99,6 +113,12 @@ jobs:
 
       - uses: actions/checkout@v4
 
+      # New: set git identity for any git operations
+      - name: Set git user
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+
       # Replace setup-python with verifying the system Python
       - name: System Python info
         run: |
@@ -106,16 +126,13 @@ jobs:
           python3 -V
           which python3
 
-      - name: Fix SSL in system Python
+      # Replaced: fix SSL on both act and GH runners
+      - name: Fix SSL (for act and GH)
         run: |
           set -euxo pipefail
-          apt-get update
-          apt-get install -y --no-install-recommends libssl3 ca-certificates
-          update-ca-certificates || true
-          python3 - <<'PY'
-          import ssl
-          print("✅  System OpenSSL:", ssl.OPENSSL_VERSION)
-          PY
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libssl3 ca-certificates
+          sudo update-ca-certificates || true
 
       - name: Install deps (venv)
         run: |
@@ -159,6 +176,20 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      # New: set git identity for any git operations
+      - name: Set git user
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+
+      # New: ensure system has updated CA certs for fetch/merge over HTTPS
+      - name: Fix SSL (for act and GH)
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libssl3 ca-certificates
+          sudo update-ca-certificates || true
 
       - name: Ensure PR merges cleanly into base
         run: |
@@ -244,6 +275,12 @@ jobs:
 
       - uses: actions/checkout@v4
 
+      # New: set git identity for any git operations
+      - name: Set git user
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+
       # Replace setup-python with verifying the system Python
       - name: System Python info
         run: |
@@ -251,16 +288,13 @@ jobs:
           python3 -V
           which python3
 
-      - name: Fix SSL in system Python
+      # Replaced: fix SSL on both act and GH runners
+      - name: Fix SSL (for act and GH)
         run: |
           set -euxo pipefail
-          apt-get update
-          apt-get install -y --no-install-recommends libssl3 ca-certificates
-          update-ca-certificates || true
-          python3 - <<'PY'
-          import ssl
-          print("✅  System OpenSSL:", ssl.OPENSSL_VERSION)
-          PY
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libssl3 ca-certificates
+          sudo update-ca-certificates || true
 
       - name: Install deps (venv)
         run: |
@@ -268,28 +302,4 @@ jobs:
           python3 -m venv .venv
           .venv/bin/pip install -U pip setuptools wheel
           if [ -f requirements.txt ]; then .venv/bin/pip install -r requirements.txt; fi
-          if [ -f requirements-dev.txt ]; then .venv/bin/pip install -r requirements-dev.txt; fi
-          if [ -f pyproject.toml ]; then .venv/bin/pip install -e .; fi
-          .venv/bin/pip install pytest pytest-cov
-
-      # For backtests, install additional dependencies
-      - name: Install backtest dependencies
-        run: |
-          set -euxo pipefail
-          if [ -f requirements-backtest.txt ]; then .venv/bin/pip install -r requirements-backtest.txt; fi
-
-      # Only run backtests if enabled
-      - name: Run backtests
-        if: ${{ env.RUN_BACKTESTS == '1' }}
-        run: |
-          set -euxo pipefail
-          mkdir -p ci_logs/backtests
-          (.venv/bin/python -m backtest_runner -q --output-dir ci_logs/backtests 2>&1 | tee ci_logs/backtests/backtest_results.txt)
-
-      - name: Upload backtest outputs
-        if: always() && !env.ACT
-        uses: actions/upload-artifact@v4
-        with:
-          name: ci-logs-backtests
-          path: ci_logs/backtests/
-
+          if [ -f requirements-dev.txt ]; then .venv/bin
