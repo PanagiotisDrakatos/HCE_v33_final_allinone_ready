@@ -51,13 +51,19 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-ruff-
 
-      - name: Install Ruff (venv)
+      - name: Install Ruff in venv (PEP 668-safe, with ensurepip fallback)
         run: |
           set -euxo pipefail
-          python3 -m venv .venvI
-          .venv/bin/pip install -U pip setuptools wheel
-          .venv/bin/pip install "ruff>=0.4.10"
+          python3 -m venv .venv || true
+          if [ ! -x ".venv/bin/pip" ]; then
+            echo "⚠️  pip not found in venv — bootstrapping with ensurepip"
+            python3 -m venv .venv --without-pip
+            .venv/bin/python -m ensurepip --default-pip
+          fi
+          .venv/bin/python -m pip install --upgrade pip setuptools wheel
+          .venv/bin/python -m pip install "ruff>=0.4.10"
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+      
 
       - name: Ruff check
         run: |
