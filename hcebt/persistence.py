@@ -139,7 +139,7 @@ class Repo:
                 time.sleep(min(1.0, 0.2 * (2 ** max(0, attempts - 1))))
         return False, attempts
 
-    def _flush(self, rows: list[dict]) -> None:
+    def _flush(self, rows: list[dict]) -> None:  # noqa: C901
         """Deduplicate and persist a batch, tracking latency and retries."""
         if not rows:
             return
