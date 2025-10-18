@@ -5,6 +5,7 @@ set -euo pipefail
 # - optionally installs `act` (if AUTO_INSTALL_ACT=1)
 # - runs CI locally with act (Linux-only image)
 # - pushes the branch and opens a PR with gh using PR_BODY.md
+# - optionally applies labels via LABELS env (comma or space separated)
 
 BRANCH_NAME=${BRANCH_NAME:-chore/ci-linux-ruff-act}
 PR_TITLE=${PR_TITLE:-"chore(ci): Linux/WSL-only + Ruff-only + act-friendly CI"}
@@ -14,6 +15,7 @@ RUN_BACKTESTS=${RUN_BACKTESTS:-1}
 RUN_ACT=${RUN_ACT:-1}
 RUN_ACT_BEFORE_PUSH=${RUN_ACT_BEFORE_PUSH:-1}
 AUTO_INSTALL_ACT=${AUTO_INSTALL_ACT:-0}
+LABELS=${LABELS:-}
 
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
@@ -27,7 +29,6 @@ ensure_bin() {
       act)
         mkdir -p .bin
         if command -v curl >/dev/null 2>&1 && command -v tar >/dev/null 2>&1; then
-          # Try to download a recent act release for linux amd64
           url=${ACT_URL:-"https://github.com/nektos/act/releases/download/v0.2.61/act_Linux_x86_64.tar.gz"}
           echo "[quick_pr] Downloading act from: $url"
           (cd .bin && curl -fsSL "$url" -o act.tgz && tar -xzf act.tgz && rm -f act.tgz) || true
@@ -80,6 +81,16 @@ if ! git push -u origin "$BRANCH_NAME"; then
   exit 1
 fi
 
+# Prepare labels args
+LABEL_ARGS=()
+if [[ -n "$LABELS" ]]; then
+  # support comma or space separated
+  IFS=',' read -ra PARTS <<< "${LABELS// /,}"
+  for lb in "${PARTS[@]}"; do
+    [[ -n "$lb" ]] && LABEL_ARGS+=( -l "$lb" )
+  done
+fi
+
 # Open PR with gh if available
 if command -v gh >/dev/null 2>&1; then
   echo "[quick_pr] Creating PR via gh"
@@ -100,12 +111,21 @@ Highlights:
 No functional code changes.
 EOF
   fi
-  gh pr create -B "$BASE_BRANCH" -H "$BRANCH_NAME" -t "$PR_TITLE" -F "$body_file" || {
-    echo "[quick_pr] gh failed to create PR. You may need to 'gh auth login' and retry.";
-  }
+  if ! gh pr create -B "$BASE_BRANCH" -H "$BRANCH_NAME" -t "$PR_TITLE" -F "$body_file" "${LABEL_ARGS[@]}"; then
+    echo "[quick_pr] gh failed to create PR — attempting to update labels on existing PR."
+    if [[ ${#LABEL_ARGS[@]} -gt 0 ]]; then
+      # Try to detect PR number and add labels
+      PR_NUM=$(gh pr view --json number -q .number 2>/dev/null || echo "")
+      if [[ -n "$PR_NUM" ]]; then
+        echo "[quick_pr] Adding labels to PR #$PR_NUM: $LABELS"
+        for ((i=0; i<${#LABEL_ARGS[@]}; i+=2)); do
+          gh pr edit "$PR_NUM" --add-label "${LABEL_ARGS[i+1]}" || true
+        done
+      fi
+    fi
+  fi
 else
   echo "[quick_pr] gh not installed; please open a PR manually."
 fi
 
 echo "[quick_pr] Done."
-
