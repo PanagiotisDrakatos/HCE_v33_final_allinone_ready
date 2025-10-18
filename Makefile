@@ -10,13 +10,17 @@ install: venv
 	$(PIP) install -r requirements.txt
 
 dev: venv
-	$(PIP) install pylint==2.17.4 ruff black
+	$(PIP) install -U pip wheel
+	# Ruff-only toolchain
+	$(PIP) install ruff
 
 check: lint test
-
-lint:
+	# Ruff-only checks (lint + format-check)
+	$(VENVDIR)/bin/ruff check --output-format=github .
+	$(VENVDIR)/bin/ruff format --check .
 	$(VENVDIR)/bin/ruff check .
-	$(VENVDIR)/bin/pylint hcebt || true
+	$(VENVDIR)/bin/ruff format .
+	$(VENVDIR)/bin/ruff check --fix .
 
 fmt:
 	$(VENVDIR)/bin/black .
