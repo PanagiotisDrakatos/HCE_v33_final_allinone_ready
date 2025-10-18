@@ -1,131 +1,189 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Quick PR helper
-# - optionally installs `act` (if AUTO_INSTALL_ACT=1)
-# - runs CI locally with act (Linux-only image)
-# - pushes the branch and opens a PR with gh using PR_BODY.md
-# - optionally applies labels via LABELS env (comma or space separated)
+BRANCH="${BRANCH:-chore/ci-ruff-only-$(date +%Y%m%d-%H%M%S)}"
+TITLE="${TITLE:-chore(ci): Linux-only + Ruff-only CI pack}"
+BODY="${BODY:-Automated PR via quick_pr.sh}"
+LABELS="${LABELS:-ci}"
+BASE="${BASE:-main}"
 
-BRANCH_NAME=${BRANCH_NAME:-chore/ci-linux-ruff-act}
-PR_TITLE=${PR_TITLE:-"chore(ci): Linux/WSL-only + Ruff-only + act-friendly CI"}
-BASE_BRANCH=${BASE_BRANCH:-main}
-ACT_IMAGE=${ACT_PLATFORM:-"ubuntu-latest=ghcr.io/catthehacker/ubuntu:act-24.04"}
-RUN_BACKTESTS=${RUN_BACKTESTS:-1}
-RUN_ACT=${RUN_ACT:-1}
-RUN_ACT_BEFORE_PUSH=${RUN_ACT_BEFORE_PUSH:-1}
-AUTO_INSTALL_ACT=${AUTO_INSTALL_ACT:-0}
-LABELS=${LABELS:-}
+RUFF_FIX="${RUFF_FIX:-1}"
+RUN_BACKTESTS="${RUN_BACKTESTS:-1}"
 
-ROOT="$(git rev-parse --show-toplevel)"
+RUN_ACT="${RUN_ACT:-1}"
+RUN_ACT_BEFORE_PUSH="${RUN_ACT_BEFORE_PUSH:-1}"
+RUN_ACT_AFTER_PUSH="${RUN_ACT_AFTER_PUSH:-0}"
+AUTO_INSTALL_ACT="${AUTO_INSTALL_ACT:-1}"
+ACT_REUSE="${ACT_REUSE:-1}"
+ACT_BIND="${ACT_BIND:-1}"
+ACT_PULL="${ACT_PULL:-0}"
+
+# ⬇️ ΣΙΓΟΥΡΟ default για πλήρη συμβατότητα με GitHub (ubuntu-24.04)
+ACT_PLATFORM="${ACT_PLATFORM:-ubuntu-24.04=ghcr.io/catthehacker/ubuntu:act-24.04}"
+# ⬇️ Προαιρετικά: πολλαπλά mappings (αν προτιμάς, άφησέ το ως έχει)
+ACT_PLATFORMS="${ACT_PLATFORMS:-ubuntu-24.04=ghcr.io/catthehacker/ubuntu:act-24.04 ubuntu-latest=ghcr.io/catthehacker/ubuntu:act-24.04}"
+
+ACT_CONTAINERLESS="${ACT_CONTAINERLESS:-0}"
+DRY_RUN="${DRY_RUN:-0}"
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+[[ -z "${ROOT}" ]] && { echo "❌ Not a git repo"; exit 1; }
 cd "$ROOT"
 
-echo "[quick_pr] Repo: $ROOT"
+# Prefer local .bin early
+export PATH="$PWD/.bin:$PATH"
 
-ensure_bin() {
-  if ! command -v "$1" >/dev/null 2>&1; then
-    echo "[quick_pr] Missing $1; attempting local install..."
-    case "$1" in
-      act)
-        mkdir -p .bin
-        if command -v curl >/dev/null 2>&1 && command -v tar >/dev/null 2>&1; then
-          url=${ACT_URL:-"https://github.com/nektos/act/releases/download/v0.2.61/act_Linux_x86_64.tar.gz"}
-          echo "[quick_pr] Downloading act from: $url"
-          (cd .bin && curl -fsSL "$url" -o act.tgz && tar -xzf act.tgz && rm -f act.tgz) || true
-          if [[ -f .bin/act ]]; then chmod +x .bin/act; export PATH="$PWD/.bin:$PATH"; fi
-        fi
-        ;;
-      gh)
-        echo "[quick_pr] gh is not installed; PR creation will be skipped."
-        ;;
-    esac
-  fi
+log(){ printf "%s\n" "$*" >&2; }
+die(){ log "❌ $*"; exit 1; }
+has(){ command -v "$1" >/dev/null 2>&1; }
+
+ACT_BIN="${ACT_BIN:-act}"
+if [[ -x ".bin/act" ]]; then ACT_BIN="$PWD/.bin/act"; fi
+if [[ -x ".bin/act.exe" ]]; then ACT_BIN="$PWD/.bin/act.exe"; fi
+
+ensure_act() {
+  if has "$ACT_BIN"; then return 0; fi
+  if has act; then ACT_BIN="$(command -v act)"; return 0; fi
+  [[ "$AUTO_INSTALL_ACT" != "1" ]] && die "'act' not found and AUTO_INSTALL_ACT=0"
+  log "⚙️  Installing 'act'…"
+  if has brew;  then brew install act && ACT_BIN="$(command -v act)" && return 0; fi
+  if has scoop; then scoop install act && ACT_BIN="$(command -v act)" && return 0; fi
+  if has choco; then choco install -y act-cli && ACT_BIN="$(command -v act)" && return 0; fi
+  mkdir -p .bin
+  arch="$(uname -m || echo x86_64)"; case "$arch" in x86_64|amd64) arch="x86_64";; aarch64|arm64) arch="arm64";; *) arch="x86_64";; esac
+  sys="$(uname -s || echo)"
+  case "$sys" in
+    *MINGW*|*MSYS*|*CYGWIN*|Windows_NT)
+      if has powershell; then
+        url="https://github.com/nektos/act/releases/latest/download/act_Windows_${arch}.zip"
+        tmp="$(mktemp -d)"
+        curl -fsSL -o "$tmp/act.zip" "$url" || die "act download failed"
+        powershell -NoProfile -Command "Expand-Archive -Path '$tmp/act.zip' -DestinationPath '$tmp' -Force" || die "Expand-Archive failed"
+        mv "$tmp/act.exe" .bin/act.exe || die "move act.exe failed"
+        chmod +x .bin/act.exe
+        ACT_BIN="$PWD/.bin/act.exe"
+      else
+        die "PowerShell not found to unzip act.exe; install act via scoop/choco."
+      fi
+      ;;
+    Darwin)
+      url="https://github.com/nektos/act/releases/latest/download/act_Darwin_${arch}.tar.gz"
+      tmp="$(mktemp -d)"
+      curl -fsSL "$url" -o "$tmp/act.tgz" || die "act download failed"
+      tar -xzf "$tmp/act.tgz" -C "$tmp" || die "untar failed"
+      mv "$tmp/act" .bin/act && chmod +x .bin/act
+      ACT_BIN="$PWD/.bin/act"
+      ;;
+    Linux|*)
+      url="https://github.com/nektos/act/releases/latest/download/act_Linux_${arch}.tar.gz"
+      tmp="$(mktemp -d)"
+      curl -fsSL "$url" -o "$tmp/act.tgz" || die "act download failed"
+      tar -xzf "$tmp/act.tgz" -C "$tmp" || die "untar failed"
+      mv "$tmp/act" .bin/act && chmod +x .bin/act
+      ACT_BIN="$PWD/.bin/act"
+      ;;
+  esac
+  log "✅ act: $ACT_BIN"
 }
 
-if [[ "$AUTO_INSTALL_ACT" == "1" ]]; then
-  ensure_bin act
-fi
+supports_flag() { "$ACT_BIN" --help 2>&1 | grep -q -- "$1"; }
 
-# Create/switch branch
-current_branch="$(git rev-parse --abbrev-ref HEAD)"
-if [[ "$current_branch" != "$BRANCH_NAME" ]]; then
-  echo "[quick_pr] Switching to branch: $BRANCH_NAME"
-  git checkout -B "$BRANCH_NAME"
-fi
-
-# Ensure we have a commit; if there are staged/unstaged changes, commit with default message
-if ! git diff --quiet || ! git diff --cached --quiet; then
-  echo "[quick_pr] Committing pending changes"
-  git add -A
-  git commit -m "chore(ci): apply Linux/Ruff automation pack"
-fi
-
-# Optional: run act before pushing
-if [[ "$RUN_ACT" == "1" && "$RUN_ACT_BEFORE_PUSH" == "1" ]]; then
-  if command -v act >/dev/null 2>&1; then
-    echo "[quick_pr] Running act for lint_and_unit job"
-    act -j lint_and_unit -W .github/workflows/ci.yml -P "$ACT_IMAGE" || true
-    if [[ "$RUN_BACKTESTS" == "1" ]]; then
-      echo "[quick_pr] Running act for integration job"
-      act -j integration -W .github/workflows/ci.yml -P "$ACT_IMAGE" || true
-    fi
-  else
-    echo "[quick_pr] act not available; skipping local CI run."
+ensure_docker() {
+  if ! has docker; then
+    log "⚠️  Docker not found. 'act' requires Docker/Podman."
+    return 1
   fi
-fi
+  if ! docker info >/dev/null 2>&1; then
+    log "⚠️  Docker engine is not running."
+    return 1
+  fi
+  return 0
+}
 
-# Push branch
-echo "[quick_pr] Pushing branch to origin"
-if ! git push -u origin "$BRANCH_NAME"; then
-  echo "[quick_pr] Push failed. Ensure you have write access and are authenticated."
-  exit 1
-fi
+run_act() {
+  ensure_act
+  ensure_docker || die "Docker engine not available"
 
-# Prepare labels args
-LABEL_ARGS=()
-if [[ -n "$LABELS" ]]; then
-  # support comma or space separated
-  IFS=',' read -ra PARTS <<< "${LABELS// /,}"
-  for lb in "${PARTS[@]}"; do
-    [[ -n "$lb" ]] && LABEL_ARGS+=( -l "$lb" )
+  local jobs=(-j lint -j tests -j pr-guard)
+  [[ "$RUN_BACKTESTS" == "1" ]] && jobs+=(-j backtests)
+
+  local reuse=(); [[ "$ACT_REUSE" == "1" ]] && reuse+=(--reuse)
+  local bind=();  [[ "$ACT_BIND"  == "1" ]] && bind+=(--bind)
+  local pull=();  [[ "$ACT_PULL"  == "1" ]] && pull+=(--pull)
+  local containerless=()
+  if [[ "$ACT_CONTAINERLESS" == "1" ]]; then
+    if supports_flag "--containerless"; then containerless+=(--containerless); else log "ℹ️  '--containerless' not supported; skipping."; fi
+  fi
+
+  # Build platform mappings (single + multi) για πλήρη συμβατότητα με GitHub runner images
+  local platform_args=()
+
+  # βασικό mapping (single)
+  if [[ -n "${ACT_PLATFORM:-}" ]]; then
+    if [[ "$ACT_PLATFORM" == *"="* ]]; then
+      platform_args+=(-P "$ACT_PLATFORM")
+      ACT_IMAGE="${ACT_PLATFORM#*=}"
+    else
+      # Αν δοθεί μόνο image, χαρτογράφησέ το σε ubuntu-24.04/ubuntu-latest
+      ACT_IMAGE="$ACT_PLATFORM"
+      platform_args+=(-P "ubuntu-24.04=$ACT_IMAGE" -P "ubuntu-latest=$ACT_IMAGE")
+    fi
+  fi
+
+  # επιπλέον mappings (multi), π.χ. "ubuntu-24.04=... ubuntu-latest=..."
+  for map in $ACT_PLATFORMS; do
+    [[ -n "$map" ]] && platform_args+=(-P "$map")
   done
+
+  log "▶️  $ACT_BIN pull_request ${jobs[*]}"
+  "$ACT_BIN" "${platform_args[@]}" "${reuse[@]}" "${bind[@]}" "${pull[@]}" "${containerless[@]}" pull_request "${jobs[@]}"
+}
+
+# ruff on PATH ώστε fmt/lint να τρέχουν πριν το PR
+if [[ -x ".venv/bin/ruff" ]]; then export PATH="$PWD/.venv/bin:$PATH"; fi
+# If ruff still missing, use tooling venv to avoid PEP 668
+if ! has ruff; then
+  VENV_DIR="${VENV_DIR:-.git/tools-venv}"
+  if [[ -x "${VENV_DIR}/bin/ruff" ]]; then
+    export PATH="${VENV_DIR}/bin:$PATH"
+  elif [[ -x "${VENV_DIR}/bin/python" ]]; then
+    "${VENV_DIR}/bin/python" -m pip install -q ruff 2>/dev/null || true
+    export PATH="${VENV_DIR}/bin:$PATH"
+  fi
 fi
 
-# Open PR with gh if available
-if command -v gh >/dev/null 2>&1; then
-  echo "[quick_pr] Creating PR via gh"
-  body_file="PR_BODY.md"
-  if [[ ! -f "$body_file" ]]; then
-    echo "[quick_pr] $body_file not found; generating a minimal body."
-    cat > "$body_file" <<'EOF'
-This PR applies the Linux/WSL-only + Ruff-only + act-friendly CI automation pack.
+# Run act BEFORE push if requested
+if [[ "$RUN_ACT" == "1" && "$RUN_ACT_BEFORE_PUSH" == "1" ]]; then
+  run_act
+fi
 
-Highlights:
-- Keep only .github/workflows/ci.yml and codeql.yml.
-- Ruff-only linting and formatting (no Black/isort/flake8).
-- Pre-commit updated to ruff hooks only.
-- Makefile updated with `pr` target and Ruff-only tasks.
-- Hooks adjusted for Ruff-only.
-- Scripts wired for local CI via `act`.
+# DRY RUN exits right before git ops
+if [[ "$DRY_RUN" == "1" ]]; then
+  log "DRY_RUN=1: exiting before git operations."
+  exit 0
+fi
 
-No functional code changes.
-EOF
-  fi
-  if ! gh pr create -B "$BASE_BRANCH" -H "$BRANCH_NAME" -t "$PR_TITLE" -F "$body_file" "${LABEL_ARGS[@]}"; then
-    echo "[quick_pr] gh failed to create PR — attempting to update labels on existing PR."
-    if [[ ${#LABEL_ARGS[@]} -gt 0 ]]; then
-      # Try to detect PR number and add labels
-      PR_NUM=$(gh pr view --json number -q .number 2>/dev/null || echo "")
-      if [[ -n "$PR_NUM" ]]; then
-        echo "[quick_pr] Adding labels to PR #$PR_NUM: $LABELS"
-        for ((i=0; i<${#LABEL_ARGS[@]}; i+=2)); do
-          gh pr edit "$PR_NUM" --add-label "${LABEL_ARGS[i+1]}" || true
-        done
-      fi
-    fi
-  fi
+# Create/update branch, commit & push
+cur="$(git rev-parse --abbrev-ref HEAD)"
+if [[ "$cur" != "$BRANCH" ]]; then git checkout -B "$BRANCH"; fi
+if [[ -n "$(git status --porcelain)" ]]; then
+  git add -A
+  git commit -m "$TITLE" || true
+fi
+git push -u origin "$BRANCH"
+
+# Create PR with gh if available
+if has gh; then
+  pr_args=(--title "$TITLE" --body "$BODY" --base "$BASE")
+  IFS=',' read -ra L <<< "$LABELS"; for l in "${L[@]}"; do pr_args+=(--label "$(echo "$l" | xargs)"); done
+  gh pr create "${pr_args[@]}" || log "⚠️  gh pr create failed; open PR manually."
 else
-  echo "[quick_pr] gh not installed; please open a PR manually."
+  log "ℹ️  'gh' not found — open PR manually: origin/$BRANCH → $BASE"
 fi
 
-echo "[quick_pr] Done."
+# Optionally run act AFTER push
+if [[ "$RUN_ACT" == "1" && "$RUN_ACT_AFTER_PUSH" == "1" ]]; then
+  run_act
+fi
+
+log "✅ quick_pr.sh complete."

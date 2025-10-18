@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+last_msg="$(git log -1 --pretty=%B || true)"
+if [[ "$last_msg" == *"[skip ci]"* ]]; then
+  echo "[pre-push] Skipping due to [skip ci] in last commit."
+  exit 0
+fi
+
+if [[ -f ".venv/bin/activate" ]]; then source ".venv/bin/activate"; fi
+
+if command -v ruff >/dev/null 2>&1; then
+  echo "[pre-push] ruff format --check ."
+  ruff format --check .
+  echo "[pre-push] ruff check ."
+  ruff check .
+else
+  echo "[pre-push] ruff not found — failing push."
+  exit 1
+fi
+
+if command -v pytest >/dev/null 2>&1; then
+  if [[ "${FAST:-0}" == "1" ]]; then
+    pytest -q -m "not slow and not e2e"
+  else
+    pytest -q
+  fi
+else
+  echo "[pre-push] pytest not found — failing push."
+  exit 1
+fi
+
+echo "[pre-push] All checks passed ✅"
