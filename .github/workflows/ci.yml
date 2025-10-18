@@ -232,22 +232,40 @@ jobs:
         run: |
           set -euxo pipefail
           mkdir -p ci_logs
+          # Disallow Windows-only scripts in the repo
           if git ls-files -z | grep -E -z '\\.(cmd|bat|ps1)$'; then
             echo "::error::Windows-only scripts (*.cmd|*.bat|*.ps1) are not allowed." | tee ci_logs/pr-guard.policy.txt
             exit 1
           fi
-          if git grep -nE '\\b(black|flake8|pylint|isort)\\b' -- . ':(exclude)*.md' ':(exclude)README*' ':(exclude)CHANGELOG*' ':(exclude)pyproject.toml' ':(exclude).github/workflows/codeql.yml' ':(exclude)scripts/**' ; then
+
+          # 1) Fail fast on explicit forbidden config files in the repo
+          if git ls-files | grep -Eq '(^|/)(\\.flake8|pylintrc|pylint\\.ini|\\.pylintrc|black\\.toml)$'; then
+            echo "::error::Found disallowed config files (black/flake8/pylint). Use Ruff only." | tee -a ci_logs/pr-guard.policy.txt
+            exit 1
+          fi
+
+          # 2) If pyproject.toml exists, only fail if it contains explicit black/flake8/pylint sections
+          if git ls-files --error-unmatch pyproject.toml >/dev/null 2>&1; then
+            if grep -nE '^\\[tool\\.(black|flake8|pylint)\\]' pyproject.toml >/dev/null 2>&1; then
+              echo "::error::pyproject.toml contains black/flake8/pylint tool config. Use Ruff only." | tee -a ci_logs/pr-guard.policy.txt
+              exit 1
+            fi
+          fi
+
+          # 3) Heuristic grep for explicit mentions that likely indicate usage — skip docs/scripts/.github/pyproject
+          if git grep -nE '\\b(black|flake8|pylint|isort)\\b' -- . ':(exclude)README*' ':(exclude)*.md' ':(exclude)pyproject.toml' ':(exclude)scripts/**' ':(exclude).github/**' ; then
             echo "::error::Found disallowed linters/configs (black/flake8/pylint/isort). Use Ruff only." | tee -a ci_logs/pr-guard.policy.txt
             exit 1
           fi
+
           echo "✅ Policy checks passed." | tee -a ci_logs/pr-guard.policy.txt
 
       - name: Enforce Conventional PR title
         run: |
           set -euxo pipefail
           title="${{ github.event.pull_request.title }}"
-          if [[ ! "$title" =~ ^(feat|fix|chore|refactor|docs|test|perf)(\(.+\))?:\ .{1,}$ ]]; then
-            echo "::error::PR title must follow Conventional Commits (e.g., 'feat: ...', 'fix(parser): ...')." | tee ci_logs/pr-guard.title.txt
+          if ! echo "$title" | grep -Eq '^(feat|fix|chore|refactor|docs|test|perf)(\(.+\))?:\ .{1,}$'; then
+            echo "::error::PR title must follow Conventional Commits (e.g., 'feat: ...', 'fix(parser): ...')."
             exit 1
           fi
           echo "✅ PR title OK." | tee ci_logs/pr-guard.title.txt
