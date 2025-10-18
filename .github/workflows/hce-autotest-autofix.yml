@@ -17,7 +17,7 @@ jobs:
       IT_TIMESCALE: "1"
       IT_CLICKHOUSE: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -81,7 +81,7 @@ jobs:
   test-and-push:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
