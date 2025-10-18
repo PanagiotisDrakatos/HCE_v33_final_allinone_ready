@@ -80,59 +80,81 @@ class Repo:
         except queue.Full:
             self.metrics["dropped_batches"] += 1
 
-    def _flush(self, rows: list[dict]):
-        if not rows:
-            return
-        # in-batch dedupe by PK
+    def _dedupe_rows(self, rows: list[dict]) -> list[dict]:
+        """Deduplicate rows by primary key."""
         seen = set()
         out = []
         for r in rows:
             key = (r["run_id"], r["ts"], r["symbol"], r["metric"])
-            if key in seen:
-                continue
-            seen.add(key)
-            out.append(r)
-        t0 = time.time()
-        ok = False
+            if key not in seen:
+                seen.add(key)
+                out.append(r)
+        return out
+
+    def _write_clickhouse(self, rows: list[dict]):
+        """Write rows to ClickHouse."""
+        cols = sorted(rows[0].keys())
+        data = [[r.get(c) for c in cols] for r in rows]
+        self.repo[1].insert(self.cfg.table, data, column_names=cols)
+
+    def _write_timescale(self, rows: list[dict]):
+        """Write rows to TimescaleDB."""
+        cols = sorted(rows[0].keys())
+        vals = ",".join(["(" + ",".join(["%s"] * len(cols)) + ")"] * len(rows))
+        args = []
+        for r in rows:
+            args.extend([r.get(c) for c in cols])
+        cols_sql = ",".join(cols)
+        pk_cols = "run_id,ts,symbol,metric"
+        sql = (
+                f"INSERT INTO {self.cfg.table} ({cols_sql}) VALUES {vals} "
+                f"ON CONFLICT ({pk_cols}) DO UPDATE SET "
+                + ",".join(
+            [f"{c}=EXCLUDED.{c}" for c in cols if c not in ("run_id", "ts", "symbol", "metric")]
+        )
+        )
+        with self.repo[1].cursor() as cur:
+            cur.execute(sql, args)
+
+    def _write_rows(self, rows: list[dict]):
+        """Write rows to the configured backend."""
+        if not self.repo:
+            return
+        if self.repo[0] == "ch":
+            self._write_clickhouse(rows)
+        elif self.repo[0] == "ts":
+            self._write_timescale(rows)
+
+    def _write_with_retries(self, rows: list[dict], max_attempts: int = 5) -> tuple[bool, int]:
+        """Attempt to write with retries and simple backoff. Returns (ok, attempts)."""
         attempts = 0
-        while not ok and attempts < 5:
+        while attempts < max_attempts:
             try:
-                if not self.repo:
-                    ok = True
-                elif self.repo[0] == "ch":
-                    cols = sorted(out[0].keys())
-                    data = [[r.get(c) for c in cols] for r in out]
-                    self.repo[1].insert(self.cfg.table, data, column_names=cols)
-                    ok = True
-                elif self.repo[0] == "ts":
-                    cols = sorted(out[0].keys())
-                    vals = ",".join(["(" + ",".join(["%s"] * len(cols)) + ")"] * len(out))
-                    args = []
-                    for r in out:
-                        args.extend([r.get(c) for c in cols])
-                    cols_sql = ",".join(cols)
-                    pk_cols = "run_id,ts,symbol,metric"
-                    sql = (
-                        f"INSERT INTO {self.cfg.table} ({cols_sql}) VALUES {vals} "
-                        f"ON CONFLICT ({pk_cols}) DO UPDATE SET "
-                        + ",".join(
-                            [
-                                f"{c}=EXCLUDED.{c}"
-                                for c in cols
-                                if c not in ("run_id", "ts", "symbol", "metric")
-                            ]
-                        )
-                    )
-                    with self.repo[1].cursor() as cur:
-                        cur.execute(sql, args)
-                    ok = True
+                self._write_rows(rows)
+                return True, attempts
             except Exception:
                 attempts += 1
                 self.metrics["batch_retry_count"] += 1
+                # Backoff: 0.2, 0.4, 0.8, 1.0, 1.0
                 time.sleep(min(1.0, 0.2 * (2 ** max(0, attempts - 1))))
+        return False, attempts
+
+    def _flush(self, rows: list[dict]) -> None:
+        """Deduplicate and persist a batch, tracking latency and retries."""
+        if not rows:
+            return
+        out = self._dedupe_rows(rows)
+        t0 = time.time()
+        ok, attempts = self._write_with_retries(out)
         self.metrics["write_latency_ms"] = (time.time() - t0) * 1000.0
         if not ok:
-            logging.error("failed to flush %d rows after %d attempts", len(rows), attempts)
+            self._log_flush_failure(rows, attempts)
+
+    def _log_flush_failure(self, rows: list[dict], attempts: int) -> None:
+        """Log flush failure with row count and attempt details."""
+        logging.error(
+            "failed to flush %d rows after %d attempts", len(rows), attempts, exc_info=True
+        )
 
     def _loop(self):
         buf: list[dict] = []
