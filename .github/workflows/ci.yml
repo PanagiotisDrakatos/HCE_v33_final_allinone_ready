@@ -2,7 +2,8 @@ name: CI
 
 on:
   pull_request:
-    branches: ["**"]
+    types: [ opened, synchronize, reopened, ready_for_review ]
+    branches: [ "**" ]
 
 concurrency:
   group: ci-${{ github.ref }}
