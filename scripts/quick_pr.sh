@@ -115,28 +115,39 @@ run_act() {
     if supports_flag "--containerless"; then containerless+=(--containerless); else log "ℹ️  '--containerless' not supported; skipping."; fi
   fi
 
-  # Build platform mappings (single + multi) για πλήρη συμβατότητα με GitHub runner images
+  # Build platform mappings (single + multi)
   local platform_args=()
-
-  # βασικό mapping (single)
   if [[ -n "${ACT_PLATFORM:-}" ]]; then
     if [[ "$ACT_PLATFORM" == *"="* ]]; then
       platform_args+=(-P "$ACT_PLATFORM")
       ACT_IMAGE="${ACT_PLATFORM#*=}"
     else
-      # Αν δοθεί μόνο image, χαρτογράφησέ το σε ubuntu-24.04/ubuntu-latest
       ACT_IMAGE="$ACT_PLATFORM"
       platform_args+=(-P "ubuntu-24.04=$ACT_IMAGE" -P "ubuntu-latest=$ACT_IMAGE")
     fi
   fi
-
-  # επιπλέον mappings (multi), π.χ. "ubuntu-24.04=... ubuntu-latest=..."
   for map in $ACT_PLATFORMS; do
     [[ -n "$map" ]] && platform_args+=(-P "$map")
   done
 
-  log "▶️  $ACT_BIN pull_request ${jobs[*]}"
-  "$ACT_BIN" "${platform_args[@]}" "${reuse[@]}" "${bind[@]}" "${pull[@]}" "${containerless[@]}" pull_request "${jobs[@]}"
+  # Show what act sees before running
+  log "ℹ️  Listing available jobs (act --list):"
+  "$ACT_BIN" "${platform_args[@]}" --list || true
+
+  local event="pull_request"
+  log "▶️  $ACT_BIN $event ${jobs[*]}"
+
+  set +e
+  "$ACT_BIN" "${platform_args[@]}" "${reuse[@]}" "${bind[@]}" "${pull[@]}" "${containerless[@]}" "$event" "${jobs[@]}"
+  rc=$?
+  set -e
+
+  if [[ $rc -ne 0 ]]; then
+    log "⚠️  act failed for event '$event' (rc=$rc). Trying 'workflow_dispatch' as fallback..."
+    event="workflow_dispatch"
+    log "▶️  $ACT_BIN $event ${jobs[*]}"
+    "$ACT_BIN" "${platform_args[@]}" "${reuse[@]}" "${bind[@]}" "${pull[@]}" "${containerless[@]}" "$event" "${jobs[@]}"
+  fi
 }
 
 # ruff on PATH ώστε fmt/lint να τρέχουν πριν το PR

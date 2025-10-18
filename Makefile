@@ -22,8 +22,9 @@ export PATH := $(abspath $(BIN)):$(PATH)
 RUFF_FIX ?= 1               # 1: autofix, 0: check only
 RUN_BACKTESTS ?= 1          # 1: run tests, 0: skip (fast)
 AUTO_INSTALL_ACT ?= 1       # 1: auto-install nektos/act if missing
-# replaces your old ACT_PLATFORM line
-ACT_PLATFORM ?= ubuntu-latest=ghcr.io/catthehacker/ubuntu:24.04,ubuntu-24.04=ghcr.io/catthehacker/ubuntu:24.04
+# Act runner images with Node+sudo preinstalled
+ACT_PLATFORM ?= ubuntu-latest=ghcr.io/catthehacker/ubuntu:full-latest,ubuntu-24.04=ghcr.io/catthehacker/ubuntu:full-latest
+
 
 
 
