@@ -22,7 +22,11 @@ export PATH := $(abspath $(BIN)):$(PATH)
 RUFF_FIX ?= 1               # 1: autofix, 0: check only
 RUN_BACKTESTS ?= 1          # 1: run tests, 0: skip (fast)
 AUTO_INSTALL_ACT ?= 1       # 1: auto-install nektos/act if missing
-ACT_PLATFORM ?= ubuntu-latest=ghcr.io/catthehacker/ubuntu:act-24.04
+# replaces your old ACT_PLATFORM line
+ACT_PLATFORM ?= ubuntu-latest=ghcr.io/catthehacker/ubuntu:24.04,ubuntu-24.04=ghcr.io/catthehacker/ubuntu:24.04
+
+
+
 
 # Overlay fast-apply (optional URLs; αν λείπουν, περιμένει local αρχεία)
 PACK ?= HCE_v33_linux_ruff_auto_pack.tar.gz
@@ -73,6 +77,8 @@ help:
 	@echo "  ci-apply          Fast apply του automation overlay (pack + script)"
 	@echo "  hooks             Install pre-commit & pre-push hook"
 	@echo "  clean             Remove .venv, caches, artifacts"
+	@echo "  deep-reset        Nuke: stop/rm ALL Docker, prune --volumes, wipe .venv/.caches, re-venv"
+	@echo "  project-reset     Safer: wipe only repo caches/.venv and pre-pull act image"
 
 .PHONY: venv
 venv:
@@ -197,6 +203,37 @@ clean:
 	@$(MAKE) _msg MSG="Clean venv & caches"
 	rm -rf "$(VENV)" .ruff_cache .pytest_cache .mypy_cache build dist coverage.xml .coverage
 	@echo "🧹 done"
+
+# ───────────────────────────── Deep reset (Docker + Python) ───────────────────
+.PHONY: deep-reset
+deep-reset:
+	@$(MAKE) _msg MSG="🔥 Full reset: Docker + Python env + caches"
+	@echo "⛔ This will stop & remove ALL Docker containers/images/volumes on this machine."
+	@echo "   If you only want a project-only cleanup, run: make project-reset"
+	@sleep 1
+	# 1) Stop & remove ALL containers (ignore errors if none)
+	docker ps -aq >/dev/null 2>&1 && docker stop $$(docker ps -aq) 2>/dev/null || true
+	docker ps -aq >/dev/null 2>&1 && docker rm -f $$(docker ps -aq) 2>/dev/null || true
+	# 2) Prune EVERYTHING (images, cache, volumes)
+	docker system prune -af --volumes || true
+	# 3) Wipe local Python/CI caches
+	rm -rf "$(VENV)" .ruff_cache .pytest_cache .mypy_cache .act-cache build dist coverage.xml .coverage *.egg-info
+	# 4) Recreate venv & reinstall deps
+	$(MAKE) venv
+	# 5) Pre-pull act runner image (optional, speeds up first act run)
+	@img="$$(echo '$(ACT_PLATFORM)' | awk -F= '{print $$2}')" ; \
+	if [ -n "$$img" ]; then echo "🐳 docker pull $$img" ; docker pull "$$img" || true ; fi
+	@echo "✅ Deep reset complete."
+
+# Safer alternative: only project-related cleanup (keeps other Docker stuff)
+.PHONY: project-reset
+project-reset:
+	@$(MAKE) _msg MSG="🧼 Project-only reset (keeps other Docker images/volumes)"
+	rm -rf "$(VENV)" .ruff_cache .pytest_cache .mypy_cache .act-cache build dist coverage.xml .coverage *.egg-info
+	$(MAKE) venv
+	@img="$$(echo '$(ACT_PLATFORM)' | awk -F= '{print $$2}')" ; \
+	if [ -n "$$img" ]; then echo "🐳 docker pull $$img" ; docker pull "$$img" || true ; fi
+	@echo "✅ Project reset complete."
 
 # ─────────────────────────────────────────────────────────────────────────────
 # End of file

@@ -15,21 +15,33 @@ env:
   PYTHON_VERSION: "3.11"
   PIP_DISABLE_PIP_VERSION_CHECK: 1
   PYTHONUNBUFFERED: 1
-  # Για GitHub runs: Repository → Settings → Variables → RUN_BACKTESTS="1" για να ενεργοποιούνται
+  # For GitHub runs: Settings → Variables → RUN_BACKTESTS="1" to enable
   RUN_BACKTESTS: ${{ vars.RUN_BACKTESTS || '0' }}
 
 jobs:
+  # ───────────────────────── Ruff Lint ─────────────────────────
   lint:
     name: Ruff Lint & Format (check)
     runs-on: ubuntu-24.04
-    container:
-      image: python:3.11-bookworm
     timeout-minutes: 10
     steps:
+      - name: Ensure Node (act only)
+        if: ${{ env.ACT == 'true' }}
+        run: |
+          apt-get update
+          apt-get install -y nodejs npm
+          node -v && npm -v
+
       - uses: actions/checkout@v4
 
+      - name: System Python info
+        run: |
+          set -euxo pipefail
+          python3 -V
+          which python3
 
       - name: Cache Ruff
+        if: ${{ !env.ACT }}
         uses: actions/cache@v4
         with:
           path: .ruff_cache
@@ -37,34 +49,25 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-ruff-
 
-      - name: Python env info
-        shell: bash
-        run: |
-          set -euxo pipefail
-          python3 -VV
-          which python3 || true
-          python3 -m pip -VV || true
-
-      - name: Install ruff (in venv)
-        shell: bash
+      # ✅ Install Ruff in a venv (PEP 668 compliant)
+      - name: Install Ruff (venv)
         run: |
           set -euxo pipefail
           python3 -m venv .venv
-          .venv/bin/pip install -U pip
-          .venv/bin/pip install "ruff>=0.6"
+          .venv/bin/pip install -U pip setuptools wheel
+          .venv/bin/pip install "ruff>=0.4.10"
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Ruff check
-        shell: bash
         run: |
           set -euxo pipefail
           mkdir -p ci_logs
-          (.venv/bin/ruff check --output-format=github --force-exclude . 2>&1 | tee ci_logs/ruff-check.txt)
+          (ruff check --output-format=github --force-exclude . 2>&1 | tee ci_logs/ruff-check.txt)
 
       - name: Ruff format (check only)
-        shell: bash
         run: |
           set -euxo pipefail
-          (.venv/bin/ruff format --check . 2>&1 | tee ci_logs/ruff-format-check.txt)
+          (ruff format --check . 2>&1 | tee ci_logs/ruff-format-check.txt)
 
       - name: Upload lint logs
         if: always() && !env.ACT
@@ -73,26 +76,48 @@ jobs:
           name: ci-logs-lint
           path: ci_logs/
 
+  # ───────────────────────── Unit Tests ─────────────────────────
   tests:
     name: Unit Tests
     runs-on: ubuntu-24.04
     needs: [lint]
-    container:
-      image: python:3.11-bookworm
     timeout-minutes: 25
     steps:
+      - name: Ensure Node (act only)
+        if: ${{ env.ACT == 'true' }}
+        run: |
+          apt-get update
+          apt-get install -y nodejs npm
+          node -v && npm -v
+
       - uses: actions/checkout@v4
 
+      # Replace setup-python with verifying the system Python
+      - name: System Python info
+        run: |
+          set -euxo pipefail
+          python3 -V
+          which python3
+
+      - name: Fix SSL in system Python
+        run: |
+          set -euxo pipefail
+          apt-get update
+          apt-get install -y --no-install-recommends libssl3 ca-certificates
+          update-ca-certificates || true
+          python3 - <<'PY'
+          import ssl
+          print("✅  System OpenSSL:", ssl.OPENSSL_VERSION)
+          PY
+
       - name: Install deps (venv)
-        shell: bash
         run: |
           set -euxo pipefail
           python3 -m venv .venv
-          .venv/bin/pip install -U pip wheel
+          .venv/bin/pip install -U pip setuptools wheel
           if [ -f requirements.txt ]; then .venv/bin/pip install -r requirements.txt; fi
           if [ -f requirements-dev.txt ]; then .venv/bin/pip install -r requirements-dev.txt; fi
           if [ -f pyproject.toml ]; then .venv/bin/pip install -e .; fi
-          .venv/bin/pip install pytest pytest-cov
           .venv/bin/pip install pytest pytest-cov
 
       - name: Run pytest (with coverage)
@@ -110,18 +135,25 @@ jobs:
             ci_logs/
             coverage.xml
 
+  # ───────────────────────── PR Guard ─────────────────────────
   pr-guard:
     name: PR Guard (merge/conflicts/policy)
     runs-on: ubuntu-24.04
     needs: [lint]
     timeout-minutes: 8
     steps:
+      - name: Ensure Node (act only)
+        if: ${{ env.ACT == 'true' }}
+        run: |
+          apt-get update
+          apt-get install -y nodejs npm
+          node -v && npm -v
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Ensure PR merges cleanly into base
-        shell: bash
         run: |
           set -euxo pipefail
           mkdir -p ci_logs
@@ -135,7 +167,6 @@ jobs:
           echo "✅ Clean merge test passed." | tee -a ci_logs/pr-guard.merge.txt
 
       - name: Check branch is not behind base
-        shell: bash
         run: |
           set -euxo pipefail
           mkdir -p ci_logs
@@ -148,7 +179,6 @@ jobs:
           echo "✅ Branch is up to date with base." | tee ci_logs/pr-guard.behind.txt
 
       - name: Disallow merge commits in PR history
-        shell: bash
         run: |
           set -euxo pipefail
           mkdir -p ci_logs
@@ -161,7 +191,6 @@ jobs:
           echo "✅ No merge commits in PR history." | tee ci_logs/pr-guard.merges.txt
 
       - name: Forbid Windows-only files & non-Ruff linters
-        shell: bash
         run: |
           set -euxo pipefail
           mkdir -p ci_logs
@@ -176,7 +205,6 @@ jobs:
           echo "✅ Policy checks passed." | tee -a ci_logs/pr-guard.policy.txt
 
       - name: Enforce Conventional PR title
-        shell: bash
         run: |
           set -euxo pipefail
           title="${{ github.event.pull_request.title }}"
@@ -193,48 +221,67 @@ jobs:
           name: ci-logs-pr-guard
           path: ci_logs/
 
+  # ───────────────────────── Backtests (optional) ─────────────────────────
   backtests:
     name: Backtests (optional)
     runs-on: ubuntu-24.04
     needs: [tests]
-    container:
-      image: python:3.11-bookworm
     timeout-minutes: 60
     steps:
+      - name: Ensure Node (act only)
+        if: ${{ env.ACT == 'true' }}
+        run: |
+          apt-get update
+          apt-get install -y nodejs npm
+          node -v && npm -v
+
       - uses: actions/checkout@v4
 
+      # Replace setup-python with verifying the system Python
+      - name: System Python info
+        run: |
+          set -euxo pipefail
+          python3 -V
+          which python3
+
+      - name: Fix SSL in system Python
+        run: |
+          set -euxo pipefail
+          apt-get update
+          apt-get install -y --no-install-recommends libssl3 ca-certificates
+          update-ca-certificates || true
+          python3 - <<'PY'
+          import ssl
+          print("✅  System OpenSSL:", ssl.OPENSSL_VERSION)
+          PY
 
       - name: Install deps (venv)
-        shell: bash
         run: |
           set -euxo pipefail
           python3 -m venv .venv
-          .venv/bin/pip install -U pip wheel
+          .venv/bin/pip install -U pip setuptools wheel
           if [ -f requirements.txt ]; then .venv/bin/pip install -r requirements.txt; fi
           if [ -f requirements-dev.txt ]; then .venv/bin/pip install -r requirements-dev.txt; fi
           if [ -f pyproject.toml ]; then .venv/bin/pip install -e .; fi
+          .venv/bin/pip install pytest pytest-cov
 
-      # act-friendly: αποφασίζουμε μέσα στο step (όχι job-level if)
-      - name: Run backtests (if RUN_BACKTESTS==1)
-        shell: bash
-        env:
-          RUN_BACKTESTS: ${{ env.RUN_BACKTESTS }}
+      # For backtests, install additional dependencies
+      - name: Install backtest dependencies
         run: |
           set -euxo pipefail
-          mkdir -p ci_logs
-          if [ "${RUN_BACKTESTS}" = "1" ]; then
-            if [ -f backtest.py ]; then
-              (.venv/bin/python backtest.py run --config examples/cfg.yaml --ab examples/A.json examples/B.json 2>&1 | tee ci_logs/backtests.txt)
-            else
-              echo "No backtest.py — skipping" | tee ci_logs/backtests.txt
-            fi
-          else
-            echo "RUN_BACKTESTS!=1 — skipping backtests" | tee ci_logs/backtests.txt
-          fi
+          if [ -f requirements-backtest.txt ]; then .venv/bin/pip install -r requirements-backtest.txt; fi
 
-      - name: Upload backtest logs
+      # Only run backtests if enabled
+      - name: Run backtests
+        if: ${{ env.RUN_BACKTESTS == '1' }}
+        run: |
+          set -euxo pipefail
+          mkdir -p ci_logs/backtests
+          (.venv/bin/python -m backtest_runner -q --output-dir ci_logs/backtests 2>&1 | tee ci_logs/backtests/backtest_results.txt)
+
+      - name: Upload backtest outputs
         if: always() && !env.ACT
         uses: actions/upload-artifact@v4
         with:
           name: ci-logs-backtests
-          path: ci_logs/
+          path: ci_logs/backtests/

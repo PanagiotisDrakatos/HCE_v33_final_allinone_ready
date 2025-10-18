@@ -1,0 +1,19 @@
+ssss.................................                                    [100%]
+
+---------- coverage: platform linux, python 3.12.3-final-0 -----------
+Name                                             Stmts   Miss  Cover   Missing
+------------------------------------------------------------------------------
+backtest.py                                         23     23     0%   1-36
+hcebt/fills.py                                     154     24    84%   89, 92-107, 148, 171, 184, 189, 197, 199, 201
+hcebt/persistence.py                               135     12    91%   45-49, 51-54, 68-69, 145, 181-182
+hcebt/runner.py                                     50      3    94%   79, 91-92
+tests/integration/test_persistence.py               21     12    43%   12-34, 39-64
+tests/integration/test_roundtrip_clickhouse.py       6      1    83%   10
+tests/integration/test_roundtrip_timescale.py        6      1    83%   10
+------------------------------------------------------------------------------
+TOTAL                                              796     76    90%
+
+17 files skipped due to complete coverage.
+Coverage XML written to file coverage.xml
+
+Required test coverage of 85% reached. Total coverage: 90.45%
