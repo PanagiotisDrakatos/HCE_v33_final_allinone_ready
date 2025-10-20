@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReleaseGateReport",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "unit",
+    "integration",
+    "security",
+    "sbom",
+    "slo_budget",
+    "decision"
+  ],
+  "properties": {
+    "unit": {
+      "type": "boolean"
+    },
+    "integration": {
+      "type": "boolean"
+    },
+    "security": {
+      "type": "boolean"
+    },
+    "sbom": {
+      "type": "boolean"
+    },
+    "slo_budget": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "decision": {
+      "type": "string",
+      "enum": [
+        "block",
+        "proceed",
+        "proceed_with_risk"
+      ]
+    },
+    "notes": {
+      "type": "string"
+    }
+  }
+}
