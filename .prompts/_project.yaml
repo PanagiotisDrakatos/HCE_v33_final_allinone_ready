@@ -1,0 +1,35 @@
+# .prompts/_project.yaml
+# Choose your primary language; adjust commands as needed.
+language: python   # options: python | typescript | go | rust | java
+
+python:
+  test: "pytest -q"
+  lint: "ruff check ."
+  fmt: "black ."
+  sec: "bandit -q -r . || true"
+
+typescript:
+  test: "npm test --silent"
+  lint: "eslint ."
+  fmt: "prettier --write ."
+  sec: "npm audit --audit-level=moderate || true"
+
+go:
+  test: "go test ./..."
+  lint: "go vet ./..."
+  fmt: "gofmt -s -w ."
+  sec: "gosec ./... || true"
+
+rust:
+  test: "cargo test --quiet"
+  lint: "cargo clippy -- -D warnings"
+  fmt: "cargo fmt --all"
+  sec: "cargo audit || true"
+
+java:
+  test: "mvn -q -DskipTests=false test"
+  lint: "mvn -q checkstyle:check spotbugs:check"
+  fmt: "google-java-format -i $(git ls-files '*.java')"
+  sec: ""  # add org-specific tooling if any
+
+commit_convention: conventional-commits
