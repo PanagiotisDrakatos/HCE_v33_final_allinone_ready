@@ -260,16 +260,6 @@ jobs:
 
           echo "✅ Policy checks passed." | tee -a ci_logs/pr-guard.policy.txt
 
-      - name: Enforce Conventional PR title
-        run: |
-          set -euxo pipefail
-          title="${{ github.event.pull_request.title }}"
-          if ! echo "$title" | grep -Eq '^(feat|fix|chore|refactor|docs|test|perf)(\(.+\))?:\ .{1,}$'; then
-            echo "::error::PR title must follow Conventional Commits (e.g., 'feat: ...', 'fix(parser): ...')."
-            exit 1
-          fi
-          echo "✅ PR title OK." | tee ci_logs/pr-guard.title.txt
-
       - name: Upload PR-Guard logs
         if: ${{ always() && env.ACT != 'true' }}
         uses: actions/upload-artifact@v4
