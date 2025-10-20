@@ -6,5 +6,5 @@ click==8.1.7
 pytest==8.3.2
 pytest-cov==5.0.0
 # Optional backends
-psycopg[binary]==3.2.10
+psycopg[binary]==3.2.11
 clickhouse-connect==0.7.15
