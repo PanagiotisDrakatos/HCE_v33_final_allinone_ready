@@ -92,7 +92,7 @@ jobs:
 
       - name: Upload lint logs
         if: ${{ always() && env.ACT != 'true' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ci-logs-lint
           path: ci_logs/
@@ -152,7 +152,7 @@ jobs:
 
       - name: Upload test outputs
         if: ${{ always() && env.ACT != 'true' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ci-logs-tests
           path: |
@@ -262,7 +262,7 @@ jobs:
 
       - name: Upload PR-Guard logs
         if: ${{ always() && env.ACT != 'true' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ci-logs-pr-guard
           path: ci_logs/
@@ -331,7 +331,7 @@ jobs:
 
       - name: Upload backtest outputs
         if: ${{ always() && env.ACT != 'true' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ci-logs-backtests
           path: ci_logs/backtests/
