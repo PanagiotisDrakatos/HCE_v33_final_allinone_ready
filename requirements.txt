@@ -1,5 +1,5 @@
 pyyaml==6.0.2
-pydantic==2.9.2
+pydantic==2.12.3
 numpy==2.1.2
 pandas==2.2.3
 click==8.1.7
