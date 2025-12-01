@@ -33,7 +33,7 @@ jobs:
           apt-get install -y nodejs npm
           node -v && npm -v
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # New: set git identity for any git operations
       - name: Set git user
@@ -111,7 +111,7 @@ jobs:
           apt-get install -y nodejs npm
           node -v && npm -v
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # New: set git identity for any git operations
       - name: Set git user
@@ -173,7 +173,7 @@ jobs:
           apt-get install -y nodejs npm
           node -v && npm -v
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -281,7 +281,7 @@ jobs:
           apt-get install -y nodejs npm
           node -v && npm -v
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # New: set git identity for any git operations
       - name: Set git user
