@@ -14,7 +14,7 @@ class Done:
 
 
 def make_run(
-    readback="4|2",
+    readback="A|2\nB|2",
     regclass="market_signals",
     up_rc=0,
     health='{"Name":"timescaledb","Health":"healthy"}',
@@ -58,7 +58,7 @@ def _down_called(run):
 
 
 def test_happy_path_passes_and_tears_down(tmp_path):
-    run = make_run(readback="4|2")
+    run = make_run(readback="A|2\nB|2")
     rc = verify.cmd_runtime(_args(tmp_path), run=run)
     assert rc == 0
     assert _down_called(run)
@@ -66,8 +66,15 @@ def test_happy_path_passes_and_tears_down(tmp_path):
     assert "timescale-roundtrip" in state["features_verified"]
 
 
+def test_wrong_distribution_is_fail(tmp_path):
+    # 4 rows, 2 labels, but not {A:2, B:2} — cardinality alone must not pass.
+    run = make_run(readback="A|3\nB|1")
+    rc = verify.cmd_runtime(_args(tmp_path), run=run)
+    assert rc == 1
+
+
 def test_zero_rows_is_fail_and_tears_down(tmp_path):
-    run = make_run(readback="0|0")
+    run = make_run(readback="")
     rc = verify.cmd_runtime(_args(tmp_path), run=run)
     assert rc == 1
     assert _down_called(run)

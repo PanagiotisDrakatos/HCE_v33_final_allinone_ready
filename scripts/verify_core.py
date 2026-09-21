@@ -19,8 +19,9 @@ SCHEMA_VERSION = 1
 REQUIRED_CHECK_IDS = ("ruff-format", "ruff-check", "pytest")
 RUNTIME_CHECK_ID = "runtime-timescale"
 RUNTIME_FEATURE = "timescale-roundtrip"
-TIMESCALE_ROWS = 4
-TIMESCALE_LABELS = 2
+# The fixtures write 2 rows labelled A and 2 labelled B; assert the exact
+# distribution so a swapped or partial write cannot pass on cardinality alone.
+TIMESCALE_EXPECTED = {"A": 2, "B": 2}
 INPUTS = (
     "requirements.txt",
     "requirements-dev.txt",
@@ -258,6 +259,16 @@ def check_receipt(
         return False, "stale receipt: tree changed"
     if require_clean and obj.get("dirty"):
         return False, "dirty worktree"
-    if require_feature and require_feature not in obj.get("features_verified", []):
-        return False, f"feature {require_feature} not verified"
+    if require_feature:
+        if require_feature not in obj.get("features_verified", []):
+            return False, f"feature {require_feature} not verified"
+        # The feature string is not enough: require the runtime check that backs
+        # it to be present and ok, so features_verified cannot claim a proof no
+        # check supports.
+        runtime_ok = any(
+            isinstance(c, dict) and c.get("id") == RUNTIME_CHECK_ID and c.get("ok")
+            for c in obj.get("checks", [])
+        )
+        if not runtime_ok:
+            return False, f"feature {require_feature} has no passing {RUNTIME_CHECK_ID} check"
     return True, "ok"

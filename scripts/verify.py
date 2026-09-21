@@ -17,6 +17,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import time
@@ -248,6 +249,56 @@ def _psql(compose, sql, run, root):
     )
 
 
+def _backtest_proof(compose, run, root, state):
+    """Drive the backtest against a healthy Timescale and read the rows back with
+    an independent psql. Returns (status, rows, labels); appends the runtime
+    feature to state only when the exact {A:2, B:2} distribution lands."""
+    port = (
+        core.run_cmd(compose + ["port", "timescaledb", "5432"], run=run, cwd=root)
+        .stdout.strip()
+        .rsplit(":", 1)[-1]
+    )
+    run_id = "verify-" + uuid.uuid4().hex[:8]
+    cfg = _write_cfg(root, run_id, port)
+    core.run_cmd(
+        [
+            sys.executable,
+            "backtest.py",
+            "run",
+            "--config",
+            cfg,
+            "--ab",
+            "verification/fixtures/A.json",
+            "verification/fixtures/B.json",
+        ],
+        run=run,
+        cwd=root,
+    )
+    if not _psql(compose, "SELECT to_regclass('market_signals')", run, root).stdout.strip():
+        return "INCONCLUSIVE", None, None
+    # Assert the exact per-label distribution, not just cardinality: a swapped
+    # A/B would still give 4 rows and 2 labels, so group by label.
+    rb = _psql(
+        compose,
+        f"SELECT label, count(*) FROM market_signals "
+        f"WHERE run_id='{run_id}' GROUP BY label ORDER BY label",
+        run,
+        root,
+    )
+    counts = {}
+    for line in rb.stdout.strip().splitlines():
+        parts = line.replace(" ", "").split("|")
+        if len(parts) == 2 and parts[1].isdigit():
+            counts[parts[0]] = int(parts[1])
+    rows, labels = sum(counts.values()), len(counts)
+    if counts == core.TIMESCALE_EXPECTED:
+        state["features_verified"] = sorted(
+            set(state.get("features_verified", []) + [core.RUNTIME_FEATURE])
+        )
+        return "PASS", rows, labels
+    return "FAIL", rows, labels
+
+
 def cmd_runtime(args, run=subprocess.run):
     """Bring up Timescale, drive the backtest, read rows back independently."""
     root = args.root
@@ -262,6 +313,17 @@ def cmd_runtime(args, run=subprocess.run):
     except FileExistsError:
         print("runtime: another verify holds .verify/lock", file=sys.stderr)
         return 1
+
+    # A SIGTERM (CI cancellation, timeout, kill) must still run the teardown, so
+    # turn it into a KeyboardInterrupt that the try/finally below catches.
+    def _on_sigterm(_signum, _frame):
+        raise KeyboardInterrupt("SIGTERM during runtime verify")
+
+    prev_term = signal.getsignal(signal.SIGTERM)
+    try:
+        signal.signal(signal.SIGTERM, _on_sigterm)
+    except (ValueError, OSError):
+        prev_term = None  # not the main thread; rely on try/finally alone
     compose = [
         "docker",
         "compose",
@@ -304,56 +366,18 @@ def cmd_runtime(args, run=subprocess.run):
         elif not runtime["healthy"]:
             status = "INCONCLUSIVE"
         else:
-            port = (
-                core.run_cmd(compose + ["port", "timescaledb", "5432"], run=run, cwd=root)
-                .stdout.strip()
-                .rsplit(":", 1)[-1]
-            )
-            run_id = "verify-" + uuid.uuid4().hex[:8]
-            cfg = _write_cfg(root, run_id, port)
-            core.run_cmd(
-                [
-                    sys.executable,
-                    "backtest.py",
-                    "run",
-                    "--config",
-                    cfg,
-                    "--ab",
-                    "verification/fixtures/A.json",
-                    "verification/fixtures/B.json",
-                ],
-                run=run,
-                cwd=root,
-            )
-            pre = _psql(compose, "SELECT to_regclass('market_signals')", run, root)
-            if not pre.stdout.strip():
-                status = "INCONCLUSIVE"
-            else:
-                rb = _psql(
-                    compose,
-                    f"SELECT count(*), count(DISTINCT label) FROM "
-                    f"market_signals WHERE run_id='{run_id}'",
-                    run,
-                    root,
-                )
-                parts = rb.stdout.strip().replace(" ", "").split("|")
-                try:
-                    rows, labels = int(parts[0]), int(parts[1])
-                except (ValueError, IndexError):
-                    rows, labels = None, None
-                if rows == core.TIMESCALE_ROWS and labels == core.TIMESCALE_LABELS:
-                    status = "PASS"
-                    state["features_verified"] = sorted(
-                        set(state.get("features_verified", []) + [core.RUNTIME_FEATURE])
-                    )
-                else:
-                    status = "FAIL"
+            status, rows, labels = _backtest_proof(compose, run, root, state)
     finally:
         try:
             core.run_cmd(compose + ["down", "-v", "--remove-orphans"], run=run, cwd=root)
         except FileNotFoundError:
             pass
         _free_lock(root)
+        if prev_term is not None:
+            try:
+                signal.signal(signal.SIGTERM, prev_term)
+            except (ValueError, OSError):
+                pass
     _add_check(
         state, core.RUNTIME_CHECK_ID, status, None, runtime["startup_ms"], rows=rows, labels=labels
     )
