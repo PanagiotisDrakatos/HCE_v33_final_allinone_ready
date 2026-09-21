@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/PanagiotisDrakatos/HCE_v33_final_allinone_ready/verification/evidence.schema.json",
+  "title": "VerifyPlaneReceipt",
+  "description": "Content-addressed evidence receipt. The in-code validator in scripts/verify_core.py is authoritative; this file is the published contract and tests/verify/test_schema.py asserts the two agree. Required check ids for a PASS: ruff-format, ruff-check, pytest (and runtime-timescale for the runtime feature).",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "repo",
+    "commit",
+    "tree_hash",
+    "dirty",
+    "diff_hash",
+    "inputs_digest",
+    "tool_versions",
+    "provider",
+    "sandbox_id",
+    "runtime",
+    "container_health",
+    "checks",
+    "features_verified",
+    "security",
+    "started_at",
+    "finished_at",
+    "result"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "repo": {"type": "string"},
+    "commit": {"type": "string"},
+    "head_sha": {"type": "string"},
+    "tree_hash": {"type": "string"},
+    "dirty": {"type": "boolean"},
+    "diff_hash": {"type": "string"},
+    "inputs_digest": {"type": "string"},
+    "tool_versions": {"type": "object"},
+    "provider": {"type": "string"},
+    "sandbox_id": {"type": "string"},
+    "runtime": {
+      "type": "object",
+      "properties": {
+        "started": {"type": "boolean"},
+        "healthy": {"type": "boolean"},
+        "pull_ms": {"type": "integer"},
+        "up_wait_ms": {"type": "integer"},
+        "startup_ms": {"type": "integer"}
+      }
+    },
+    "container_health": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "status"],
+        "properties": {
+          "name": {"type": "string"},
+          "health": {"type": "string"},
+          "status": {"enum": ["PASS", "FAIL", "INCONCLUSIVE"]}
+        }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "ok", "status"],
+        "properties": {
+          "id": {"type": "string"},
+          "ok": {"type": "boolean"},
+          "status": {"enum": ["PASS", "FAIL", "INCONCLUSIVE"]},
+          "exit_code": {"type": ["integer", "null"]},
+          "duration_ms": {"type": ["integer", "null"]},
+          "collected": {"type": "integer"},
+          "skipped": {"type": "integer"}
+        }
+      }
+    },
+    "features_verified": {"type": "array", "items": {"type": "string"}},
+    "security": {"type": "array"},
+    "started_at": {"type": "string"},
+    "finished_at": {"type": "string"},
+    "result": {"enum": ["PASS", "FAIL", "INCONCLUSIVE"]}
+  }
+}

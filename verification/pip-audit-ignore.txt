@@ -1,0 +1,5 @@
+# pip-audit vulnerability ignore list (dated, auditable).
+# One advisory id per line; text after '#' is the required rationale + review
+# date. Applied by scripts/verify.py security locally and in CI. Never a blanket
+# skip: click (runtime) was bumped to its fix version instead of ignored.
+PYSEC-2026-1845  # pytest 8.3.2 -> 9.0.3 is a major bump that also needs a pytest-cov upgrade; dev/test-only tool, not runtime. Deferred to its own change. Review by 2026-12-21.
