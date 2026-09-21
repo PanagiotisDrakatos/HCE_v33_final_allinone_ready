@@ -30,6 +30,13 @@ coverage/
 
 # Generated artifacts
 run_artifacts/
+.verify/
+
+# Orphaned nested clone removed from the index; keep it out for good
+tmp/
+
+# Knowledge graph output (graphify), if built locally
+graphify-out/
 
 # OS
 .DS_Store
