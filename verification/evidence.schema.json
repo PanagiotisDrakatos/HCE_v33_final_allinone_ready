@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/PanagiotisDrakatos/HCE_v33_final_allinone_ready/verification/evidence.schema.json",
   "title": "VerifyPlaneReceipt",
-  "description": "Content-addressed evidence receipt. The in-code validator in scripts/verify_core.py is authoritative; this file is the published contract and tests/verify/test_schema.py asserts the two agree. Required check ids for a PASS: ruff-format, ruff-check, pytest (and runtime-timescale for the runtime feature).",
+  "description": "Content-addressed evidence receipt. The in-code validator in scripts/verify_core.py is authoritative; this file is the published contract and tests/verify/test_schema.py asserts the two agree. Check ids produced across the lanes: ruff-format, ruff-check, pytest (fast lane) and runtime-timescale (runtime lane). A PASS requires every check the receipt contains to be ok; the runtime proof is enforced by the aggregate via --require-feature timescale-roundtrip, and the fast/unit lanes by their own required job results.",
   "type": "object",
   "additionalProperties": true,
   "required": [

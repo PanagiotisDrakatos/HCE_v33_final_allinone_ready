@@ -95,7 +95,23 @@ def test_pass_with_empty_checks_rejected():
     assert not ok
 
 
-def test_pass_missing_required_check_rejected():
-    only_pytest = [{"id": "pytest", "ok": True, "status": "PASS"}]
-    ok, reason = core.check_receipt(g(checks=only_pytest))
-    assert not ok
+def test_runtime_only_receipt_is_valid_but_needs_the_feature():
+    # A CI runtime-verify receipt carries only the runtime check. It is
+    # schema-valid, and the runtime proof is enforced via --require-feature,
+    # not by demanding the fast checks be inside this receipt.
+    runtime_only = [{"id": "runtime-timescale", "ok": True, "status": "PASS"}]
+    ok, _ = core.check_receipt(g(checks=runtime_only), require_feature="timescale-roundtrip")
+    assert ok
+    ok2, reason = core.check_receipt(
+        g(checks=runtime_only, features_verified=[]), require_feature="timescale-roundtrip"
+    )
+    assert not ok2 and "timescale-roundtrip" in reason
+
+
+def test_pass_with_a_not_ok_check_rejected():
+    mixed = [
+        {"id": "pytest", "ok": True, "status": "PASS"},
+        {"id": "runtime-timescale", "ok": False, "status": "FAIL"},
+    ]
+    ok, reason = core.check_receipt(g(checks=mixed))
+    assert not ok and "not ok" in reason

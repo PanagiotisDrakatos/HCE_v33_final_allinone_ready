@@ -220,13 +220,15 @@ def validate_receipt(obj):
         errs.append("result not in {PASS,FAIL,INCONCLUSIVE}")
     if isinstance(obj.get("checks"), list) and len(obj["checks"]) < 1:
         errs.append("checks: minItems 1")
-    check_ids = {c.get("id") for c in obj.get("checks", []) if isinstance(c, dict)}
+    # A PASS receipt must have every check it contains marked ok. Which checks a
+    # receipt is expected to carry is a caller policy, not a schema rule: a
+    # single `make verify` receipt holds the fast + runtime checks, while the
+    # CI runtime-verify lane produces a runtime-only receipt (the fast/unit
+    # lanes are separate required jobs the aggregate checks via needs.*.result,
+    # and the runtime proof is enforced with --require-feature).
     if obj.get("result") == "PASS":
-        for rid in REQUIRED_CHECK_IDS:
-            if rid not in check_ids:
-                errs.append(f"PASS but missing required check: {rid}")
         for c in obj.get("checks", []):
-            if isinstance(c, dict) and c.get("id") in REQUIRED_CHECK_IDS and not c.get("ok"):
+            if isinstance(c, dict) and not c.get("ok"):
                 errs.append(f"PASS but check not ok: {c.get('id')}")
     return errs
 
