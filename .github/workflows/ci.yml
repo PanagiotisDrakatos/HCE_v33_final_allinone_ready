@@ -1,197 +1,87 @@
 name: CI
 
 on:
-  pull_request:
-  workflow_dispatch:
+  pull_request: {}
+  workflow_dispatch: {}
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+# Only permission any lane needs. Fork PRs get the same read-only token; no
+# step uses a secret, so forks run every check on merit.
 permissions:
   contents: read
 
 env:
-  PYTHON_VERSION: "3.11"
-  PIP_DISABLE_PIP_VERSION_CHECK: 1
-  PYTHONUNBUFFERED: 1
-  # For GitHub runs: Settings → Variables → RUN_BACKTESTS="1" to enable
-  RUN_BACKTESTS: ${{ vars.RUN_BACKTESTS || '0' }}
+  PYTHONUNBUFFERED: "1"
+  UV_VERSION: "0.12.17"
 
 jobs:
-  # ───────────────────────── Ruff Lint ─────────────────────────
-  lint:
-    name: Ruff Lint & Format (check)
+  static:
+    name: static
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      # act runners may not have node; GH runners do. Install only on act.
       - name: Ensure Node (act only)
         if: ${{ env.ACT == 'true' }}
         run: |
-          apt-get update
-          apt-get install -y nodejs npm
-          node -v && npm -v
-
-      - uses: actions/checkout@v4
-
-      # New: set git identity for any git operations
-      - name: Set git user
-        run: |
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global user.name "github-actions[bot]"
-
-      # Replace setup-python with verifying the system Python
-      - name: System Python info
-        run: |
-          set -euxo pipefail
-          python3 -V
-          which python3
-
-      # New: fix SSL on both act and GH runners before any pip/network ops
-      - name: Fix SSL (for act and GH)
-        run: |
-          set -euxo pipefail
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libssl3 ca-certificates
-          sudo update-ca-certificates || true
-
-      - name: Cache Ruff
-        if: ${{ env.ACT != 'true' }}
-        uses: actions/cache@v4
+          apt-get update && apt-get install -y nodejs npm
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: .ruff_cache
-          key: ${{ runner.os }}-ruff-${{ hashFiles('pyproject.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-ruff-
-
-      - name: Install Ruff in venv (PEP 668-safe, with ensurepip fallback)
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+      - name: Set up uv venv
         run: |
-          set -euxo pipefail
-          python3 -m venv .venv || true
-          if [ ! -x ".venv/bin/pip" ]; then
-            echo "⚠️  pip not found in venv — bootstrapping with ensurepip"
-            python3 -m venv .venv --without-pip
-            .venv/bin/python -m ensurepip --default-pip
-          fi
-          .venv/bin/python -m pip install --upgrade pip setuptools wheel
-          .venv/bin/python -m pip install "ruff>=0.4.10"
+          pipx install "uv==$UV_VERSION" || pipx upgrade uv
+          uv venv .venv
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
-      
+          echo "VIRTUAL_ENV=$PWD/.venv" >> "$GITHUB_ENV"
+      - run: uv pip install -r requirements-dev.txt
+      - run: ruff check --output-format=github --force-exclude .
+      - run: ruff format --check .
 
-      - name: Ruff check
-        run: |
-          set -euxo pipefail
-          mkdir -p ci_logs
-          (ruff check --output-format=github --force-exclude . 2>&1 | tee ci_logs/ruff-check.txt)
-
-      - name: Ruff format (check only)
-        run: |
-          set -euxo pipefail
-          (ruff format --check . 2>&1 | tee ci_logs/ruff-format-check.txt)
-
-      - name: Upload lint logs
-        if: ${{ always() && env.ACT != 'true' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: ci-logs-lint
-          path: ci_logs/
-
-  # ───────────────────────── Unit Tests ─────────────────────────
-  tests:
-    name: Unit Tests
+  unit:
+    name: unit
     runs-on: ubuntu-24.04
-    needs: [ lint ]
-    timeout-minutes: 25
+    timeout-minutes: 15
     steps:
       - name: Ensure Node (act only)
         if: ${{ env.ACT == 'true' }}
         run: |
-          apt-get update
-          apt-get install -y nodejs npm
-          node -v && npm -v
-
-      - uses: actions/checkout@v4
-
-      # New: set git identity for any git operations
-      - name: Set git user
-        run: |
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global user.name "github-actions[bot]"
-
-      # Replace setup-python with verifying the system Python
-      - name: System Python info
-        run: |
-          set -euxo pipefail
-          python3 -V
-          which python3
-
-      # Replaced: fix SSL on both act and GH runners
-      - name: Fix SSL (for act and GH)
-        run: |
-          set -euxo pipefail
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libssl3 ca-certificates
-          sudo update-ca-certificates || true
-
-      - name: Install deps (venv)
-        run: |
-          set -euxo pipefail
-          python3 -m venv .venv
-          .venv/bin/pip install -U pip setuptools wheel
-          if [ -f requirements.txt ]; then .venv/bin/pip install -r requirements.txt; fi
-          if [ -f requirements-dev.txt ]; then .venv/bin/pip install -r requirements-dev.txt; fi
-          if [ -f pyproject.toml ]; then .venv/bin/pip install -e .; fi
-          .venv/bin/pip install pytest pytest-cov
-
-      - name: Run pytest (with coverage)
-        run: |
-          set -euxo pipefail
-          mkdir -p ci_logs
-          (.venv/bin/pytest -q --cov=. --cov-report=xml --cov-report=term 2>&1 | tee ci_logs/pytest.txt)
-
-      - name: Upload test outputs
-        if: ${{ always() && env.ACT != 'true' }}
-        uses: actions/upload-artifact@v4
+          apt-get update && apt-get install -y nodejs npm
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          name: ci-logs-tests
-          path: |
-            ci_logs/
-            coverage.xml
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+      - name: Set up uv venv
+        run: |
+          pipx install "uv==$UV_VERSION" || pipx upgrade uv
+          uv venv .venv
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$PWD/.venv" >> "$GITHUB_ENV"
+      - run: uv pip install -r requirements.txt -r requirements-dev.txt -e .
+      # pytest.ini owns --cov=hcebt --cov=lib --cov-fail-under=85; do not override.
+      - run: pytest -m "not integration"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: unit-coverage
+          path: coverage.xml
+          if-no-files-found: warn
 
-  # ───────────────────────── PR Guard ─────────────────────────
-  pr-guard:
-    name: PR Guard (merge/conflicts/policy)
+  pr-policy:
+    name: pr-policy
     runs-on: ubuntu-24.04
-    needs: [ lint ]
     timeout-minutes: 8
     steps:
-      - name: Ensure Node (act only)
-        if: ${{ env.ACT == 'true' }}
-        run: |
-          apt-get update
-          apt-get install -y nodejs npm
-          node -v && npm -v
-
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-
-      # New: set git identity for any git operations
-      - name: Set git user
-        run: |
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global user.name "github-actions[bot]"
-
-      # New: ensure system has updated CA certs for fetch/merge over HTTPS
-      - name: Fix SSL (for act and GH)
-        run: |
-          set -euxo pipefail
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libssl3 ca-certificates
-          sudo update-ca-certificates || true
-
       - name: Ensure PR merges cleanly into base
+        if: github.event_name == 'pull_request'
         run: |
           set -euxo pipefail
           mkdir -p ci_logs
@@ -202,136 +92,153 @@ jobs:
             echo "::error::PR cannot be merged cleanly into ${GITHUB_BASE_REF}. Please rebase." | tee -a ci_logs/pr-guard.merge.txt
             exit 1
           fi
-          echo "✅ Clean merge test passed." | tee -a ci_logs/pr-guard.merge.txt
-
+          echo "Clean merge test passed." | tee -a ci_logs/pr-guard.merge.txt
       - name: Check branch is not behind base
+        if: github.event_name == 'pull_request'
         run: |
           set -euxo pipefail
-          mkdir -p ci_logs
           git fetch origin "$GITHUB_BASE_REF"
           BEHIND=$(git rev-list --count HEAD.."origin/$GITHUB_BASE_REF")
           if [ "$BEHIND" -gt 0 ]; then
-            echo "::error::Branch is $BEHIND commits behind ${GITHUB_BASE_REF}. Please rebase/merge." | tee ci_logs/pr-guard.behind.txt
+            echo "::error::Branch is $BEHIND commits behind ${GITHUB_BASE_REF}. Please rebase/merge."
             exit 1
           fi
-          echo "✅ Branch is up to date with base." | tee ci_logs/pr-guard.behind.txt
-
       - name: Disallow merge commits in PR history
+        if: github.event_name == 'pull_request'
         run: |
           set -euxo pipefail
-          mkdir -p ci_logs
           git fetch origin "$GITHUB_BASE_REF"
           MERGES=$(git rev-list --merges --count "origin/$GITHUB_BASE_REF"..HEAD)
           if [ "$MERGES" -gt 0 ]; then
-            echo "::error::PR contains merge commits. Please rebase on ${GITHUB_BASE_REF}." | tee ci_logs/pr-guard.merges.txt
+            echo "::error::PR contains merge commits. Please rebase on ${GITHUB_BASE_REF}."
             exit 1
           fi
-          echo "✅ No merge commits in PR history." | tee ci_logs/pr-guard.merges.txt
-
       - name: Forbid Windows-only files & non-Ruff linters
         run: |
           set -euxo pipefail
-          mkdir -p ci_logs
-          # Disallow Windows-only scripts in the repo
-          if git ls-files -z | grep -E -z '\\.(cmd|bat|ps1)$'; then
-            echo "::error::Windows-only scripts (*.cmd|*.bat|*.ps1) are not allowed." | tee ci_logs/pr-guard.policy.txt
+          if git ls-files -z | grep -E -z '\.(cmd|bat|ps1)$'; then
+            echo "::error::Windows-only scripts (*.cmd|*.bat|*.ps1) are not allowed."
             exit 1
           fi
-
-          # 1) Fail fast on explicit forbidden config files in the repo
-          if git ls-files | grep -Eq '(^|/)(\\.flake8|pylintrc|pylint\\.ini|\\.pylintrc|black\\.toml)$'; then
-            echo "::error::Found disallowed config files (black/flake8/pylint). Use Ruff only." | tee -a ci_logs/pr-guard.policy.txt
+          if git ls-files | grep -Eq '(^|/)(\.flake8|pylintrc|pylint\.ini|\.pylintrc|black\.toml)$'; then
+            echo "::error::Found disallowed config files (black/flake8/pylint). Use Ruff only."
             exit 1
           fi
-
-          # 2) If pyproject.toml exists, only fail if it contains explicit black/flake8/pylint sections
           if git ls-files --error-unmatch pyproject.toml >/dev/null 2>&1; then
-            if grep -nE '^\\[tool\\.(black|flake8|pylint)\\]' pyproject.toml >/dev/null 2>&1; then
-              echo "::error::pyproject.toml contains black/flake8/pylint tool config. Use Ruff only." | tee -a ci_logs/pr-guard.policy.txt
+            if grep -nE '^\[tool\.(black|flake8|pylint)\]' pyproject.toml >/dev/null 2>&1; then
+              echo "::error::pyproject.toml contains black/flake8/pylint tool config. Use Ruff only."
               exit 1
             fi
           fi
-
-          # 3) Heuristic grep for explicit mentions that likely indicate usage — skip docs/scripts/.github/pyproject
-          if git grep -nE '\\b(black|flake8|pylint|isort)\\b' -- . ':(exclude)README*' ':(exclude)*.md' ':(exclude)pyproject.toml' ':(exclude)scripts/**' ':(exclude).github/**' ; then
-            echo "::error::Found disallowed linters/configs (black/flake8/pylint/isort). Use Ruff only." | tee -a ci_logs/pr-guard.policy.txt
+          if git grep -nE '\b(black|flake8|pylint|isort)\b' -- . ':(exclude)README*' ':(exclude)*.md' ':(exclude)pyproject.toml' ':(exclude)scripts/**' ':(exclude).github/**' ':(exclude).prompts/**' ':(exclude)verification/**'; then
+            echo "::error::Found disallowed linters/configs (black/flake8/pylint/isort). Use Ruff only."
             exit 1
           fi
+          echo "Policy checks passed."
 
-          echo "✅ Policy checks passed." | tee -a ci_logs/pr-guard.policy.txt
-
-      - name: Upload PR-Guard logs
-        if: ${{ always() && env.ACT != 'true' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: ci-logs-pr-guard
-          path: ci_logs/
-
-  # ───────────────────────── Backtests (optional) ─────────────────────────
-  backtests:
-    name: Backtests (optional)
+  security:
+    name: security
     runs-on: ubuntu-24.04
-    needs: [ tests ]
-    timeout-minutes: 60
+    timeout-minutes: 10
     steps:
       - name: Ensure Node (act only)
         if: ${{ env.ACT == 'true' }}
         run: |
-          apt-get update
-          apt-get install -y nodejs npm
-          node -v && npm -v
-
-      - uses: actions/checkout@v4
-
-      # New: set git identity for any git operations
-      - name: Set git user
-        run: |
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global user.name "github-actions[bot]"
-
-      # Replace setup-python with verifying the system Python
-      - name: System Python info
-        run: |
-          set -euxo pipefail
-          python3 -V
-          which python3
-
-      # Replaced: fix SSL on both act and GH runners
-      - name: Fix SSL (for act and GH)
-        run: |
-          set -euxo pipefail
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libssl3 ca-certificates
-          sudo update-ca-certificates || true
-
-      - name: Install deps (venv)
-        run: |
-          set -euxo pipefail
-          python3 -m venv .venv
-          .venv/bin/pip install -U pip setuptools wheel
-          if [ -f requirements.txt ]; then .venv/bin/pip install -r requirements.txt; fi
-          if [ -f requirements-dev.txt ]; then .venv/bin/pip install -r requirements-dev.txt; fi
-          if [ -f pyproject.toml ]; then .venv/bin/pip install -e .; fi
-          .venv/bin/pip install pytest pytest-cov
-
-      # For backtests, install additional dependencies if present
-      - name: Install backtest dependencies
-        run: |
-          set -euxo pipefail
-          if [ -f requirements-backtest.txt ]; then .venv/bin/pip install -r requirements-backtest.txt; fi
-
-      # Only run backtests if enabled
-      - name: Run backtests
-        if: ${{ env.RUN_BACKTESTS == '1' }}
-        run: |
-          set -euxo pipefail
-          mkdir -p ci_logs/backtests
-          echo "Backtests would run here. Provide a runner or script if needed." | tee ci_logs/backtests/backtest_results.txt
-          # Example placeholder: .venv/bin/python -m backtest_runner -q --output-dir ci_logs/backtests
-
-      - name: Upload backtest outputs
-        if: ${{ always() && env.ACT != 'true' }}
-        uses: actions/upload-artifact@v4
+          apt-get update && apt-get install -y nodejs npm
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          name: ci-logs-backtests
-          path: ci_logs/backtests/
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+      - name: Set up uv venv
+        run: |
+          pipx install "uv==$UV_VERSION" || pipx upgrade uv
+          uv venv .venv
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$PWD/.venv" >> "$GITHUB_ENV"
+      - run: uv pip install -r requirements.txt -r requirements-dev.txt
+      # Blocking: bandit HIGH severity AND HIGH confidence, pip-audit when a fix
+      # version exists. One policy, shared with scripts/verify.py security.
+      - run: python scripts/verify.py security
+
+  runtime-verify:
+    name: runtime-verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Ensure Node (act only)
+        if: ${{ env.ACT == 'true' }}
+        run: |
+          apt-get update && apt-get install -y nodejs npm
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+      - name: Runner facts
+        run: docker compose version
+      - name: Set up uv venv
+        run: |
+          pipx install "uv==$UV_VERSION" || pipx upgrade uv
+          uv venv .venv
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$PWD/.venv" >> "$GITHUB_ENV"
+      # No `-e .` here: it regenerates the tracked hcebt.egg-info and would
+      # dirty the tree before the receipt binds it. backtest.py runs from the
+      # repo root, so hcebt imports from source without an editable install.
+      - run: uv pip install -r requirements.txt -r requirements-dev.txt
+      - name: Runtime proof + receipt
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python scripts/verify.py runtime
+          python scripts/verify.py receipt
+      - name: Tear down (always)
+        if: always()
+        run: |
+          docker compose -f docker-compose.yml -f compose.verify.yml down -v --remove-orphans || true
+          python scripts/verify.py clean || true
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: verify-receipt
+          path: .verify/receipt.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  aggregate:
+    needs: [static, unit, pr-policy, security, runtime-verify]
+    # Run even when a lane fails, then check each result explicitly: a skipped,
+    # cancelled, or failed lane must not read as success.
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    env:
+      NEEDS_JSON: ${{ toJSON(needs) }}
+    steps:
+      - name: Every lane must be success
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+          r = {k: v["result"] for k, v in json.loads(os.environ["NEEDS_JSON"]).items()}
+          print(r)
+          want = {"static", "unit", "pr-policy", "security", "runtime-verify"}
+          bad = sorted(k for k in want if r.get(k) != "success")
+          sys.exit(f"lanes not success: {bad}" if bad else 0)
+          PY
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: verify-receipt
+          path: receipt-artifact
+      - name: Receipt is PASS, schema-valid, bound to this tree, runtime-proven
+        run: |
+          python3 scripts/verify.py check \
+            --receipt receipt-artifact/receipt.json \
+            --expect-repo "$GITHUB_REPOSITORY" \
+            --expect-tree "$(git rev-parse HEAD^{tree})" \
+            --require-clean --require-feature timescale-roundtrip
