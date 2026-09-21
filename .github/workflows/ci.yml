@@ -80,6 +80,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      - name: Set git identity for the merge test
+        if: github.event_name == 'pull_request'
+        run: |
+          git config user.email "ci@local"
+          git config user.name "ci"
       - name: Ensure PR merges cleanly into base
         if: github.event_name == 'pull_request'
         run: |
