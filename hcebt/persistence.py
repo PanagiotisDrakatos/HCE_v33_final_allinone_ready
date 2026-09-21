@@ -33,6 +33,8 @@ class Repo:
         self.cfg = cfg
         self.metrics = {
             "dropped_batches": 0,
+            "failed_batches": 0,
+            "unflushed": False,
             "batch_retry_count": 0,
             "write_latency_ms": 0.0,
             "submitted_batches": 0,
@@ -58,10 +60,14 @@ class Repo:
             self.thread.start()
 
     def stop(self):
-        # signal loop to exit and join if running
+        # Signal the loop to exit and join long enough for its final flush,
+        # including a full retry budget, so a lost batch is counted before we
+        # return. A batch that is still not persisted marks the run unflushed.
         self.stop_flag = True
         if self.thread.is_alive():
-            self.thread.join(timeout=max(2.0, self.cfg.flush_interval_ms / 1000 + 1.0))
+            budget = sum(min(1.0, 0.2 * (2**k)) for k in range(5))  # retry backoff
+            self.thread.join(timeout=max(6.0, self.cfg.flush_interval_ms / 1000 + budget + 1.0))
+        self.metrics["unflushed"] = self.thread.is_alive()
         if self.repo and self.repo[0] == "ts":
             try:
                 self.repo[1].close()
@@ -148,6 +154,7 @@ class Repo:
         ok, attempts = self._write_with_retries(out)
         self.metrics["write_latency_ms"] = (time.time() - t0) * 1000.0
         if not ok:
+            self.metrics["failed_batches"] += 1
             self._log_flush_failure(rows, attempts)
 
     def _log_flush_failure(self, rows: list[dict], attempts: int) -> None:

@@ -30,6 +30,15 @@ def run_cmd(config_path, ab_paths):
     B = json.load(open(ab_paths[1]))
     res = run_ab(cfg, A, B)
     print(json.dumps(res, indent=2))
+    m = res.get("repo_metrics", {})
+    failed, dropped = m.get("failed_batches", 0), m.get("dropped_batches", 0)
+    unflushed = m.get("unflushed", False)
+    if failed or dropped or unflushed:
+        click.echo(
+            f"backtest: lost batches (failed={failed} dropped={dropped} unflushed={unflushed})",
+            err=True,
+        )
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":

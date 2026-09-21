@@ -1,10 +1,12 @@
-import os
-
 import pytest
 
 pytestmark = [pytest.mark.integration]
 
 
-@pytest.mark.skipif(os.environ.get("IT_CLICKHOUSE") != "1", reason="set IT_CLICKHOUSE=1 to enable")
 def test_roundtrip_clickhouse():
-    assert True  # placeholder read-back test
+    """ClickHouse round-trip is deferred: the verify-plane change proves the
+    Timescale path (see openspec/changes/verify-plane-v0). ClickHouse carries
+    open questions (empty password, ISO string into DateTime64, init.sql
+    execution) that need their own change. This is an explicit deferral, not a
+    silent placeholder pass."""
+    pytest.skip("ClickHouse round-trip deferred to a later change")

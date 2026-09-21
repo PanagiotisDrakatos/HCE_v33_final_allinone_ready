@@ -6,6 +6,8 @@ import pytest
 
 from hcebt.persistence import Repo, RepoConfig
 
+pytestmark = [pytest.mark.integration]
+
 
 @pytest.mark.skipif(not os.getenv("IT_CLICKHOUSE"), reason="ClickHouse IT disabled")
 def test_clickhouse_write_smoke():
@@ -62,3 +64,14 @@ def test_timescale_write_smoke():
     )
     time.sleep(1.0)
     repo.stop()
+    assert repo.metrics["failed_batches"] == 0
+    import psycopg
+
+    with (
+        psycopg.connect(
+            os.getenv("TIMESCALE_DSN", "postgresql://postgres:postgres@localhost:5432/hce")
+        ) as conn,
+        conn.cursor() as cur,
+    ):
+        cur.execute("SELECT count(*) FROM market_signals WHERE run_id=%s", (rid,))
+        assert cur.fetchone()[0] == 1
