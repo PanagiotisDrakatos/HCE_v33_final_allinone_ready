@@ -78,7 +78,9 @@ help:
 	@echo "  ci-apply          Fast apply του automation overlay (pack + script)"
 	@echo "  hooks             Install pre-commit & pre-push hook"
 	@echo "  clean             Remove .venv, caches, artifacts"
-	@echo "  deep-reset        Nuke: stop/rm ALL Docker, prune --volumes, wipe .venv/.caches, re-venv"
+	@echo "  verify            fast + runtime proof + evidence receipt"
+	@echo "  verify-check      Fail if the receipt is stale or not PASS"
+	@echo "  clean-runtime     Tear down verify compose projects (project-scoped)"
 	@echo "  project-reset     Safer: wipe only repo caches/.venv and pre-pull act image"
 
 .PHONY: venv
@@ -205,26 +207,23 @@ clean:
 	rm -rf "$(VENV)" .ruff_cache .pytest_cache .mypy_cache build dist coverage.xml .coverage
 	@echo "🧹 done"
 
-# ───────────────────────────── Deep reset (Docker + Python) ───────────────────
-.PHONY: deep-reset
-deep-reset:
-	@$(MAKE) _msg MSG="🔥 Full reset: Docker + Python env + caches"
-	@echo "⛔ This will stop & remove ALL Docker containers/images/volumes on this machine."
-	@echo "   If you only want a project-only cleanup, run: make project-reset"
-	@sleep 1
-	# 1) Stop & remove ALL containers (ignore errors if none)
-	docker ps -aq >/dev/null 2>&1 && docker stop $$(docker ps -aq) 2>/dev/null || true
-	docker ps -aq >/dev/null 2>&1 && docker rm -f $$(docker ps -aq) 2>/dev/null || true
-	# 2) Prune EVERYTHING (images, cache, volumes)
-	docker system prune -af --volumes || true
-	# 3) Wipe local Python/CI caches
-	rm -rf "$(VENV)" .ruff_cache .pytest_cache .mypy_cache .act-cache build dist coverage.xml .coverage *.egg-info
-	# 4) Recreate venv & reinstall deps
-	$(MAKE) venv
-	# 5) Pre-pull act runner image (optional, speeds up first act run)
-	@img="$$(echo '$(ACT_PLATFORM)' | awk -F= '{print $$2}')" ; \
-	if [ -n "$$img" ]; then echo "🐳 docker pull $$img" ; docker pull "$$img" || true ; fi
-	@echo "✅ Deep reset complete."
+# ───────────────────────────── Verify plane ──────────────────────────────────
+# `deep-reset` was removed: it stopped and removed every container on the host
+# and pruned all images and volumes host-wide, which is unsafe on any shared
+# node. Use `clean-runtime` (project-scoped) or `project-reset` (repo caches).
+.PHONY: verify verify-check clean-runtime
+verify:
+	@$(MAKE) _msg MSG="verify: fast + runtime proof + receipt"
+	$(PY) scripts/verify.py fast
+	$(PY) scripts/verify.py runtime
+	$(PY) scripts/verify.py receipt
+
+verify-check:
+	$(PY) scripts/verify.py check --receipt .verify/receipt.json
+
+clean-runtime:
+	@$(MAKE) _msg MSG="Tear down verify compose projects (project-scoped)"
+	$(PY) scripts/verify.py clean
 
 # Safer alternative: only project-related cleanup (keeps other Docker stuff)
 .PHONY: project-reset

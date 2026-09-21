@@ -12,25 +12,15 @@ fi
 
 if [[ -f ".venv/bin/activate" ]]; then source ".venv/bin/activate"; fi
 
-if command -v ruff >/dev/null 2>&1; then
-  echo "[pre-push] ruff format --check ."
-  ruff format --check .
-  echo "[pre-push] ruff check ."
-  ruff check .
-else
-  echo "[pre-push] ruff not found — failing push."
-  exit 1
+# Local feedback only. The remote required 'aggregate' check is the merge
+# authority; a local skip never bypasses it. Blocks only on a failing gate.
+python scripts/verify.py fast
+python scripts/verify.py receipt
+
+# Runtime proof is opt-in locally (needs the Docker Compose v2 plugin):
+if [[ "${VERIFY_RUNTIME:-0}" == "1" ]]; then
+  python scripts/verify.py runtime
+  python scripts/verify.py receipt
 fi
 
-if command -v pytest >/dev/null 2>&1; then
-  if [[ "${FAST:-0}" == "1" ]]; then
-    pytest -q -m "not slow and not e2e"
-  else
-    pytest -q
-  fi
-else
-  echo "[pre-push] pytest not found — failing push."
-  exit 1
-fi
-
-echo "[pre-push] All checks passed ✅"
+echo "[pre-push] verify fast + receipt passed ✅"

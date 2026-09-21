@@ -1,0 +1,17 @@
+# Verification overlay: parallel-safe, health-gated Timescale for `verify runtime`.
+# Used only via `-f docker-compose.yml -f compose.verify.yml` (not auto-loaded).
+# `!override` replaces the base ports so an ephemeral host port is bound instead
+# of the fixed 5432, letting two verify runs share one daemon without colliding;
+# the base already drops container_name so names are project-prefixed.
+services:
+  timescaledb:
+    ports: !override
+      - "127.0.0.1::5432"
+    healthcheck:
+      # -h 127.0.0.1 matters: during initdb the server listens on the unix
+      # socket only, so a bare pg_isready would false-pass before the DB is up.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d hce"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 10s

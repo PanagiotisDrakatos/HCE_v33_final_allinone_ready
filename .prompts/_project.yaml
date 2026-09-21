@@ -5,8 +5,10 @@ language: python   # options: python | typescript | go | rust | java
 python:
   test: "pytest -q"
   lint: "ruff check ."
-  fmt: "black ."
-  sec: "bandit -q -r . || true"
+  fmt: "ruff format ."
+  # Blocking: HIGH severity AND HIGH confidence. Same invocation as
+  # scripts/verify.py security (tests/policy/test_ci_policy.py pins the match).
+  sec: "bandit -q -r hcebt lib backtest.py -lll -iii"
 
 typescript:
   test: "npm test --silent"
