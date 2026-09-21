@@ -181,6 +181,14 @@ class Repo:
                     buf = []
                     last = time.time()
 
+        # Drain anything still queued when stop_flag flipped: submit() puts
+        # batches on the queue faster than the loop pulls them, so on stop the
+        # un-pulled batches would otherwise be lost silently (not even counted).
+        while True:
+            try:
+                buf.extend(self.q.get_nowait())
+            except queue.Empty:
+                break
         # Final flush on stop
         try:
             if buf:
